@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import os
 import time
+import threading
 import requests
 import subprocess
 import logging
@@ -135,12 +136,21 @@ def main():
                         if avatar_url:
                             avatar_path = download_avatar(avatar_url, sender_id)
                             
-                        # Send desktop notification
-                        cmd = ["notify-send", title, content]
-                        if avatar_path:
-                            cmd.extend(["-i", avatar_path])
-                        
-                        subprocess.Popen(cmd)
+                        # Send desktop notification and wait for click in a separate thread
+                        def trigger_notification(t, c, ap):
+                            cmd = ["notify-send", "-A", "default=Reply", t, c]
+                            if ap:
+                                cmd.extend(["-i", ap])
+                            try:
+                                # This blocks until the notification is dismissed or clicked
+                                out = subprocess.check_output(cmd, text=True).strip()
+                                if out == "default":
+                                    # Open Roblox Chat in the default browser
+                                    subprocess.Popen(["xdg-open", "https://www.roblox.com/chat"], start_new_session=True)
+                            except Exception as ex:
+                                logging.error(f"Notification error: {ex}")
+
+                        threading.Thread(target=trigger_notification, args=(title, content, avatar_path), daemon=True).start()
                         
         except Exception as e:
             logging.error(f"Error during polling: {e}")
