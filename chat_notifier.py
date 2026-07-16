@@ -1,4 +1,4 @@
-#!/home/dim/Projects/RobloxChats/.venv/bin/python
+#!/usr/bin/env python3
 import os
 import time
 import requests
