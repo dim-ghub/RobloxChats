@@ -145,8 +145,8 @@ def main():
                                 # This blocks until the notification is dismissed or clicked
                                 out = subprocess.check_output(cmd, text=True).strip()
                                 if out == "default":
-                                    # Open Roblox Chat in the default browser
-                                    subprocess.Popen(["xdg-open", "https://www.roblox.com/chat"], start_new_session=True)
+                                    # Open Roblox in the default browser
+                                    subprocess.Popen(["xdg-open", "https://www.roblox.com/home"], start_new_session=True)
                             except Exception as ex:
                                 logging.error(f"Notification error: {ex}")
 
