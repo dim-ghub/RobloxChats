@@ -113,6 +113,13 @@ def install_desktop_shortcut():
     app_path = os.path.abspath(os.path.join(SCRIPT_DIR, "main.py"))
     os.chmod(app_path, os.stat(app_path).st_mode | stat.S_IEXEC)
 
+    bin_dir = os.path.expanduser("~/.local/bin")
+    os.makedirs(bin_dir, exist_ok=True)
+    launcher = os.path.join(bin_dir, "robloxchats")
+    with open(launcher, "w") as f:
+        f.write(f"#!/bin/sh\nexec /usr/bin/env python3 {app_path} \"$@\"\n")
+    os.chmod(launcher, os.stat(launcher).st_mode | stat.S_IEXEC)
+
     icon_line = "Icon=utilities-terminal"
     src_icon = os.path.join(ASSETS_DIR, "roblox_logo.png")
     if os.path.exists(src_icon):
@@ -125,7 +132,7 @@ def install_desktop_shortcut():
     desktop_content = f"""[Desktop Entry]
 Type=Application
 Name=RobloxChats
-Exec=/usr/bin/env python3 {app_path}
+Exec=robloxchats
 {icon_line}
 Terminal=false
 Categories=Network;Chat;
