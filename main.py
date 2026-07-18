@@ -128,6 +128,7 @@ def get_circular_pixmap(image_path, size=48, presence_type=0, unread=False):
 class BubbleWidget(QFrame):
     def __init__(self, is_self, parent=None):
         super().__init__(parent)
+        self.setObjectName("bubbleWidget")
         self.is_self = is_self
         self.is_highlighted = False
         self.update_style()
@@ -158,6 +159,7 @@ class BubbleWidget(QFrame):
 class InputContainerWidget(QFrame):
     def __init__(self, parent=None):
         super().__init__(parent)
+        self.setObjectName("inputContainer")
         pal = QApplication.palette()
         bg_color = pal.color(QPalette.ColorRole.Base)
         if bg_color.lightness() < 128:
@@ -177,6 +179,7 @@ class InputContainerWidget(QFrame):
 class SendButton(QPushButton):
     def __init__(self, parent=None):
         super().__init__(parent)
+        self.setObjectName("sendButton")
         pal = QApplication.palette()
         btn_color = pal.color(QPalette.ColorRole.Button).name()
         hover_color = pal.color(QPalette.ColorRole.Highlight).name()
@@ -184,17 +187,17 @@ class SendButton(QPushButton):
         text_color = pal.color(QPalette.ColorRole.ButtonText).name()
         
         self.setStyleSheet(f"""
-            SendButton {{
+            #sendButton {{
                 background-color: {btn_color};
                 border-radius: 16px;
                 color: {text_color};
                 font-weight: bold;
                 font-size: 18px;
             }}
-            SendButton:hover {{
+            #sendButton:hover {{
                 background-color: {hover_color};
             }}
-            SendButton:pressed {{
+            #sendButton:pressed {{
                 background-color: {pressed_color};
             }}
         """)
