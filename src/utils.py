@@ -11,7 +11,7 @@ from PyQt6.QtWidgets import QApplication
 from PyQt6.QtGui import QPixmap, QPainter, QPainterPath, QColor, QPen, QPalette
 from PyQt6.QtCore import Qt
 
-from constants import ASSETS_DIR, CONFIG_PATH
+from constants import ASSETS_DIR, CONFIG_PATH, SCRIPT_DIR
 
 
 def get_circular_pixmap(image_path, size=48, presence_type=0, unread=False):
@@ -110,7 +110,7 @@ def download_avatar_sync(user_id):
 def install_desktop_shortcut():
     import shutil
 
-    app_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "main.py"))
+    app_path = os.path.abspath(os.path.join(SCRIPT_DIR, "main.py"))
     os.chmod(app_path, os.stat(app_path).st_mode | stat.S_IEXEC)
 
     icon_line = "Icon=utilities-terminal"
