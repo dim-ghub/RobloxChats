@@ -319,10 +319,6 @@ class ConversationWidget(QWidget):
         self.setLayout(inner_layout)
 
 
-    def showEvent(self, event):
-        super().showEvent(event)
-        self.pop_anim.start()
-
 class QuoteFrame(QFrame):
     clicked = pyqtSignal(str)
     def __init__(self, msg_id, parent=None):
@@ -461,6 +457,10 @@ class MessageWidget(QWidget):
             layout.addStretch()
             
         self.setLayout(layout)
+        
+    def showEvent(self, event):
+        super().showEvent(event)
+        self.pop_anim.start()
         
     def trigger_highlight(self):
         if hasattr(self, 'bubble_container'):
