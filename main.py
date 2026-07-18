@@ -405,11 +405,6 @@ class MessageWidget(QWidget):
         self.setLayout(self.main_layout)
         
 
-    def resizeEvent(self, event):
-        super().resizeEvent(event)
-        if hasattr(self, 'bubble_container'):
-            self.bubble_container.setMaximumWidth(int(self.width() * 0.75))
-
     def showEvent(self, event):
         super().showEvent(event)
         if self.should_animate:
@@ -706,6 +701,7 @@ class MainWindow(QMainWindow):
         self.msg_list = QListWidget()
         self.msg_list.setObjectName("msg_list")
         self.msg_list.setVerticalScrollMode(QListWidget.ScrollMode.ScrollPerPixel)
+        self.msg_list.setResizeMode(QListView.ResizeMode.Adjust)
         self.msg_list.verticalScrollBar().valueChanged.connect(self.on_scroll_changed)
         
         input_container = InputContainerWidget()
@@ -878,6 +874,19 @@ class MainWindow(QMainWindow):
             self.loader_thread.start()
 
 
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        if hasattr(self, 'msg_list'):
+            w = self.msg_list.viewport().width()
+            max_w = int(w * 0.75)
+            for i in range(self.msg_list.count()):
+                item = self.msg_list.item(i)
+                widget = self.msg_list.itemWidget(item)
+                if widget and hasattr(widget, 'bubble_container'):
+                    widget.bubble_container.setMaximumWidth(max_w)
+                    widget.adjustSize()
+                    item.setSizeHint(widget.sizeHint())
+
     def on_conv_selected(self, item):
         cid = item.data(Qt.ItemDataRole.UserRole)
         if cid:
@@ -1021,6 +1030,8 @@ class MainWindow(QMainWindow):
             if msg_id:
                 item.setData(Qt.ItemDataRole.UserRole, msg_id)
             widget = MessageWidget(content, is_self, avatar_path, reply_data, animate=True)
+            if hasattr(widget, 'bubble_container'):
+                widget.bubble_container.setMaximumWidth(int(self.msg_list.viewport().width() * 0.75))
             widget.reply_clicked.connect(self.go_to_message)
             
             widget.style().unpolish(widget)
