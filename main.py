@@ -157,22 +157,25 @@ class MainWindow(QMainWindow):
         
         self.setup_login_tab()
         self.setup_chat_tab()
+        
+        load_dotenv()
+        self.cookie = os.environ.get("ROBLOSECURITY")
+        if self.cookie:
+            self.cookie_input.setText(self.cookie)
+            
+        if not start_minimized:
+            self.show()
+            
+        # Defer potentially hanging operations (tray, dbus, network) to after UI is shown
+        QTimer.singleShot(100, self.post_init)
+        
+    def post_init(self):
         self.setup_tray()
         
         self.notifier_thread = NotifierThread()
         self.notifier_thread.new_message_signal.connect(self.on_new_message)
         self.notifier_thread.start()
         
-        load_dotenv()
-        self.cookie = os.environ.get("ROBLOSECURITY")
-        if self.cookie:
-            self.cookie_input.setText(self.cookie)
-            QTimer.singleShot(100, self.auto_login)
-            
-        if not start_minimized:
-            self.show()
-            
-    def auto_login(self):
         if self.cookie:
             self.login()
             
