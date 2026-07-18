@@ -12,7 +12,7 @@ from dotenv import load_dotenv
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QLineEdit, QPushButton, QListWidget, QLabel, QDialog,
-    QSystemTrayIcon, QMenu, QSplitter, QMessageBox, QListWidgetItem, QSizePolicy, QStyledItemDelegate, QStyle
+    QSystemTrayIcon, QMenu, QSplitter, QMessageBox, QListWidgetItem, QSizePolicy, QStyledItemDelegate, QStyle, QFrame
 )
 from PyQt6.QtGui import QIcon, QAction, QPixmap, QPainter, QPainterPath, QColor, QFont, QPalette, QBrush, QPen
 from PyQt6.QtCore import QThread, pyqtSignal, Qt, QTimer, QSize, QEvent
@@ -202,8 +202,13 @@ class SettingsDialog(QDialog):
 class ConversationWidget(QWidget):
     def __init__(self, title, preview_text, avatar_path=None, presence_type=0, unread=False):
         super().__init__()
-        layout = QHBoxLayout()
-        layout.setContentsMargins(12, 12, 12, 12)
+        
+        main_layout = QVBoxLayout()
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.setSpacing(0)
+        
+        inner_layout = QHBoxLayout()
+        inner_layout.setContentsMargins(12, 12, 12, 12)
         
         avatar_lbl = QLabel()
         avatar_lbl.setPixmap(get_circular_pixmap(avatar_path, 40, presence_type, unread))
@@ -231,14 +236,21 @@ class ConversationWidget(QWidget):
         text_layout.addWidget(preview_lbl)
         text_layout.addStretch()
         
-        layout.addWidget(avatar_lbl)
-        layout.addLayout(text_layout)
-        layout.addStretch()
+        inner_layout.addWidget(avatar_lbl)
+        inner_layout.addLayout(text_layout)
+        inner_layout.addStretch()
         
-        self.setLayout(layout)
+        line = QFrame()
+        line.setFrameShape(QFrame.Shape.HLine)
+        line.setStyleSheet("background-color: rgba(128, 128, 128, 0.15); border: none; min-height: 1px; max-height: 1px;")
+        
+        main_layout.addLayout(inner_layout)
+        main_layout.addWidget(line)
+        
+        self.setLayout(main_layout)
 
 class MessageWidget(QWidget):
-    def __init__(self, content, is_self, avatar_path=None):
+    def __init__(self, content, is_self, avatar_path=None, reply_data=None):
         super().__init__()
         
         layout = QHBoxLayout()
@@ -246,6 +258,17 @@ class MessageWidget(QWidget):
         
         bubble_layout = QVBoxLayout()
         bubble_layout.setContentsMargins(14, 10, 14, 10)
+        
+        if reply_data:
+            reply_lbl = QLabel(f"Replying to {reply_data.get('sender', 'Unknown')}: {reply_data.get('content', '')}")
+            reply_lbl.setStyleSheet("color: palette(placeholderText); font-size: 11px;")
+            reply_lbl.setWordWrap(True)
+            bubble_layout.addWidget(reply_lbl)
+            
+            line = QFrame()
+            line.setFrameShape(QFrame.Shape.HLine)
+            line.setStyleSheet("background-color: palette(mid); max-height: 1px; margin: 2px 0px;")
+            bubble_layout.addWidget(line)
         
         content_lbl = QLabel(content)
         content_lbl.setWordWrap(True)
@@ -560,8 +583,15 @@ class MainWindow(QMainWindow):
         
         input_container.setLayout(input_layout)
         
+        self.system_msg_lbl = QLabel("")
+        self.system_msg_lbl.setStyleSheet("color: palette(placeholderText); font-size: 12px; font-weight: bold; padding: 4px;")
+        self.system_msg_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.system_msg_lbl.setWordWrap(True)
+        self.system_msg_lbl.hide()
+        
         bottom_panel = QVBoxLayout()
         bottom_panel.setContentsMargins(16, 8, 16, 16)
+        bottom_panel.addWidget(self.system_msg_lbl)
         bottom_panel.addWidget(input_container)
         
         right_panel.addWidget(self.msg_list)
@@ -697,6 +727,7 @@ class MainWindow(QMainWindow):
             self.current_conv_id = cid
             self.current_next_cursor = None
             self.is_loading_history = False
+            self.system_msg_lbl.hide()
             
             if cid in self.unread_convs:
                 self.unread_convs.remove(cid)
@@ -753,9 +784,28 @@ class MainWindow(QMainWindow):
         insert_row = 0
         
         for m in reversed(msgs):
-            sender_id = str(m.get("sender_user_id", m.get("senderTargetId", m.get("senderUserId"))))
+            msg_type = m.get("type", "user")
             content = m.get("content", "")
+            if msg_type == "system":
+                self.system_msg_lbl.setText(content)
+                self.system_msg_lbl.show()
+                continue
+                
+            sender_id = str(m.get("sender_user_id", m.get("senderTargetId", m.get("senderUserId"))))
             created_at_str = m.get("created_at")
+            
+            reply_data = None
+            replies_to = m.get("replies_to")
+            if replies_to:
+                rep_sender_id = str(replies_to.get("sender_user_id"))
+                if rep_sender_id == str(api.my_user_id):
+                    rep_sender_name = "You"
+                else:
+                    rep_sender_name = extract_name(rep_sender_id, user_data) if rep_sender_id else "Unknown"
+                reply_data = {
+                    "sender": rep_sender_name,
+                    "content": replies_to.get("content", "")
+                }
             
             if created_at_str:
                 try:
@@ -787,7 +837,7 @@ class MainWindow(QMainWindow):
                 avatar_path = download_avatar_sync(sender_id)
                 
             item = QListWidgetItem()
-            widget = MessageWidget(content, is_self, avatar_path)
+            widget = MessageWidget(content, is_self, avatar_path, reply_data)
             
             widget.style().unpolish(widget)
             widget.style().polish(widget)
