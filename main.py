@@ -33,7 +33,7 @@ from dotenv import load_dotenv
 
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
-    QLineEdit, QPushButton, QListWidget, QLabel, QDialog,
+    QLineEdit, QPushButton, QListWidget, QLabel, QDialog, QListView,
     QSystemTrayIcon, QMenu, QSplitter, QMessageBox, QListWidgetItem, QSizePolicy, QStyledItemDelegate, QStyle, QFrame,
     QGraphicsOpacityEffect, QGraphicsEffect, QStackedLayout
 )
