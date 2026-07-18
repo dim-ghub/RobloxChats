@@ -125,6 +125,40 @@ def get_circular_pixmap(image_path, size=48, presence_type=0, unread=False):
     painter.end()
     return target
 
+class PopInEffect(QGraphicsEffect):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._progress = 0.0
+        
+    @pyqtProperty(float)
+    def progress(self):
+        return self._progress
+        
+    @progress.setter
+    def progress(self, val):
+        self._progress = val
+        self.update()
+        
+    def draw(self, painter):
+        if self._progress < 0.01:
+            return
+            
+        painter.save()
+        scale_val = 0.8 + (0.2 * self._progress)
+        opacity_val = min(1.0, self._progress * 1.25)
+        
+        painter.setOpacity(opacity_val)
+        
+        rect = self.sourceBoundingRect()
+        center = rect.center()
+        
+        painter.translate(center)
+        painter.scale(scale_val, scale_val)
+        painter.translate(-center)
+        
+        self.drawSource(painter)
+        painter.restore()
+
 class BubbleWidget(QWidget):
     def __init__(self, is_self, parent=None):
         super().__init__(parent)
@@ -150,7 +184,7 @@ class BubbleWidget(QWidget):
         painter.setBrush(bg_color)
         painter.setPen(Qt.PenStyle.NoPen)
         painter.drawRoundedRect(self.rect(), 16, 16)
-        painter.end()
+
 
 class InputContainerWidget(QWidget):
     def paintEvent(self, event):
@@ -167,7 +201,7 @@ class InputContainerWidget(QWidget):
         painter.setBrush(bg_color)
         painter.setPen(pal.color(QPalette.ColorRole.Mid))
         painter.drawRoundedRect(self.rect(), 24, 24)
-        painter.end()
+
 
 class SendButton(QPushButton):
     def paintEvent(self, event):
@@ -192,7 +226,7 @@ class SendButton(QPushButton):
         font.setBold(True)
         painter.setFont(font)
         painter.drawText(self.rect(), Qt.AlignmentFlag.AlignCenter, self.text())
-        painter.end()
+
 
 class SettingsDialog(QDialog):
     def __init__(self, parent=None):
@@ -275,6 +309,16 @@ class MessageWidget(QWidget):
     reply_clicked = pyqtSignal(str)
     def __init__(self, content, is_self, avatar_path=None, reply_data=None):
         super().__init__()
+        
+        self.pop_eff = PopInEffect(self)
+        self.setGraphicsEffect(self.pop_eff)
+        
+        self.pop_anim = QPropertyAnimation(self.pop_eff, b"progress")
+        self.pop_anim.setDuration(300)
+        self.pop_anim.setStartValue(0.0)
+        self.pop_anim.setEndValue(1.0)
+        self.pop_anim.setEasingCurve(QEasingCurve.Type.OutBack)
+        QTimer.singleShot(10, self.pop_anim.start)
         
         layout = QHBoxLayout()
         layout.setContentsMargins(4, 4, 4, 4)
