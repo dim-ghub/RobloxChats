@@ -4,3 +4,7 @@ __pycache__/
 *.pyc
 chat_notifier.log
 config.json
+node_modules/
+package.json
+package-lock.json
+assets/roblox_avatar*.png
