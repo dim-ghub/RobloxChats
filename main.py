@@ -702,7 +702,6 @@ class MainWindow(QMainWindow):
         
         self.msg_list = QListWidget()
         self.msg_list.setObjectName("msg_list")
-        self.msg_list.setStyleSheet("background: transparent; border: none;")
         self.msg_list.setVerticalScrollMode(QListWidget.ScrollMode.ScrollPerPixel)
         self.msg_list.verticalScrollBar().valueChanged.connect(self.on_scroll_changed)
         
