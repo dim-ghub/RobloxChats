@@ -7,7 +7,7 @@ from dotenv import load_dotenv
 
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
-    QLineEdit, QPushButton, QListWidget, QLabel,
+    QLineEdit, QPushButton, QListWidget, QLabel, QDialog,
     QSystemTrayIcon, QMenu, QSplitter, QMessageBox,
     QListWidgetItem, QSizePolicy, QFrame, QListView
 )
