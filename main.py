@@ -125,40 +125,6 @@ def get_circular_pixmap(image_path, size=48, presence_type=0, unread=False):
     painter.end()
     return target
 
-class PopInEffect(QGraphicsEffect):
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self._progress = 0.0
-        
-    @pyqtProperty(float)
-    def progress(self):
-        return self._progress
-        
-    @progress.setter
-    def progress(self, val):
-        self._progress = val
-        self.update()
-        
-    def draw(self, painter):
-        if self._progress < 0.01:
-            return
-            
-        painter.save()
-        scale_val = 0.8 + (0.2 * self._progress)
-        opacity_val = min(1.0, self._progress * 1.25)
-        
-        painter.setOpacity(opacity_val)
-        
-        rect = self.sourceBoundingRect()
-        center = rect.center()
-        
-        painter.translate(center)
-        painter.scale(scale_val, scale_val)
-        painter.translate(-center)
-        
-        self.drawSource(painter)
-        painter.restore()
-
 class BubbleWidget(QFrame):
     def __init__(self, is_self, parent=None):
         super().__init__(parent)
@@ -201,7 +167,7 @@ class InputContainerWidget(QFrame):
         border_color = pal.color(QPalette.ColorRole.Mid)
         
         self.setStyleSheet(f"""
-            InputContainerWidget {{
+            QFrame {{
                 background-color: {bg_color.name()};
                 border: 1px solid {border_color.name()};
                 border-radius: 24px;
@@ -321,14 +287,12 @@ class MessageWidget(QWidget):
         self.should_animate = animate
         
         if self.should_animate:
-            self.pop_eff = PopInEffect(self)
-            self.setGraphicsEffect(self.pop_eff)
-            
-            self.pop_anim = QPropertyAnimation(self.pop_eff, b"progress")
+            self.pop_anim = QVariantAnimation(self)
             self.pop_anim.setDuration(300)
             self.pop_anim.setStartValue(0.0)
             self.pop_anim.setEndValue(1.0)
             self.pop_anim.setEasingCurve(QEasingCurve.Type.OutBack)
+            self.pop_anim.valueChanged.connect(self._update_margins)
         
         message_column = QVBoxLayout()
         message_column.setSpacing(4)
@@ -442,6 +406,17 @@ class MessageWidget(QWidget):
             
         self.setLayout(self.main_layout)
         
+    def _update_margins(self, val):
+        scale = val
+        if scale < 0: scale = 0
+        
+        max_margin = 30
+        margin = int(max_margin * (1.0 - scale))
+        
+        # Animate left/right padding to simulate a horizontal grow without squishing text too much
+        if self.layout().count() > 0:
+            self.main_layout.setContentsMargins(4 + margin, 4, 4 + margin, 4)
+
     def showEvent(self, event):
         super().showEvent(event)
         if self.should_animate:
@@ -928,13 +903,15 @@ class MainWindow(QMainWindow):
 
     def _update_fade_overlay(self, alpha):
         pal = self.palette()
-        bg = pal.color(QPalette.ColorRole.Base)
+        bg = pal.color(QPalette.ColorRole.Window)
         self.fade_overlay.setStyleSheet(f"background-color: rgba({bg.red()}, {bg.green()}, {bg.blue()}, {alpha});")
 
     def on_conv_selected(self, item):
         cid = item.data(Qt.ItemDataRole.UserRole)
         if cid:
-            self.fade_anim.start()
+            pal = self.palette()
+            bg = pal.color(QPalette.ColorRole.Window)
+            self.fade_overlay.setStyleSheet(f"background-color: {bg.name()};")
             self.current_conv_id = cid
             self.current_next_cursor = None
             self.is_loading_history = False
@@ -1097,8 +1074,9 @@ class MainWindow(QMainWindow):
             new_scroll_max = self.msg_list.verticalScrollBar().maximum()
             delta = new_scroll_max - old_scroll_max
             self.msg_list.verticalScrollBar().setValue(old_scroll_val + delta)
-        else:
+        if not is_prepend:
             self.msg_list.scrollToBottom()
+            self.fade_anim.start()
             
         self.is_loading_history = False
         
