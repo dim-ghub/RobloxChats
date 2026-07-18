@@ -35,16 +35,16 @@ QListWidget {
     outline: none;
 }
 QListWidget#conv_list::item {
-    border-radius: 8px;
+    border-radius: 16px;
     padding: 2px;
 }
 QListWidget#conv_list::item:selected {
     background: rgba(128, 128, 128, 0.2);
-    border-radius: 8px;
+    border-radius: 16px;
 }
 QListWidget#conv_list::item:hover {
     background: rgba(128, 128, 128, 0.1);
-    border-radius: 8px;
+    border-radius: 16px;
 }
 QListWidget#msg_list::item:selected {
     background: transparent;
@@ -701,6 +701,30 @@ class MainWindow(QMainWindow):
             self.loader_thread.finished_signal.connect(self.on_messages_loaded)
             self.loader_thread.start()
             
+    def format_timestamp(self, dt):
+        now = datetime.now(dt.tzinfo)
+        time_str = dt.strftime("%I:%M %p").lstrip("0")
+        if time_str.startswith(":"):
+            time_str = "12" + time_str
+            
+        if dt.date() == now.date():
+            return time_str
+            
+        delta_days = (now.date() - dt.date()).days
+        if delta_days == 1:
+            return f"Yesterday | {time_str}"
+            
+        if delta_days < 7:
+            return f"{dt.strftime('%A')} | {time_str}"
+            
+        if dt.year == now.year:
+            # Drop zero padding on day
+            day = str(dt.day)
+            return f"{dt.strftime('%b')} {day} | {time_str}"
+            
+        day = str(dt.day)
+        return f"{dt.strftime('%b')} {day} {dt.year} | {time_str}"
+            
     def on_messages_loaded(self, msgs, user_data):
         self.msg_list.clear()
         
@@ -717,7 +741,7 @@ class MainWindow(QMainWindow):
                     dt = datetime.fromisoformat(created_at_str.replace("Z", "+00:00")).astimezone()
                     if last_time is None or (dt - last_time).total_seconds() > 300:
                         ts_item = QListWidgetItem()
-                        lbl = QLabel(dt.strftime("%B %d, %Y %I:%M %p"))
+                        lbl = QLabel(self.format_timestamp(dt))
                         lbl.setStyleSheet("color: palette(placeholderText); font-size: 12px; font-weight: bold; padding: 16px 0px 8px 0px;")
                         lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
                         ts_item.setSizeHint(lbl.sizeHint())
