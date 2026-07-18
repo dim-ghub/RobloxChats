@@ -1,6 +1,28 @@
 #!/usr/bin/env python3
+import argparse
 import sys
 import os
+
+def install_desktop_shortcut():
+    import stat
+    app_path = os.path.abspath(__file__)
+    os.chmod(app_path, os.stat(app_path).st_mode | stat.S_IEXEC)
+    
+    desktop_content = f"""[Desktop Entry]
+Type=Application
+Name=RobloxChats
+Exec=/usr/bin/env python3 {app_path}
+Icon=utilities-terminal
+Terminal=false
+Categories=Network;Chat;
+"""
+    apps_dir = os.path.expanduser("~/.local/share/applications")
+    os.makedirs(apps_dir, exist_ok=True)
+    desktop_file = os.path.join(apps_dir, "robloxchats.desktop")
+    with open(desktop_file, "w") as f:
+        f.write(desktop_content)
+    print(f"Installed .desktop shortcut to {desktop_file}")
+    sys.exit(0)
 import argparse
 import asyncio
 import logging
@@ -235,6 +257,17 @@ class MessageWidget(QWidget):
     def __init__(self, content, is_self, avatar_path=None, reply_data=None):
         super().__init__()
         
+        self.effect = QGraphicsOpacityEffect(self)
+        self.setGraphicsEffect(self.effect)
+        self.effect.setOpacity(0.0)
+        
+        self.anim = QPropertyAnimation(self.effect, b"opacity")
+        self.anim.setDuration(250)
+        self.anim.setStartValue(0.0)
+        self.anim.setEndValue(1.0)
+        self.anim.setEasingCurve(QEasingCurve.Type.InOutQuad)
+        self.anim.start()
+        
         layout = QHBoxLayout()
         layout.setContentsMargins(4, 4, 4, 4)
         
@@ -254,6 +287,10 @@ class MessageWidget(QWidget):
         
         content_lbl = QLabel(content)
         content_lbl.setWordWrap(True)
+        # Prevent premature wrapping in layouts
+        min_w = min(600, len(content) * 7)
+        if min_w > 100:
+            content_lbl.setMinimumWidth(min_w)
         content_lbl.setTextInteractionFlags(
             Qt.TextInteractionFlag.TextSelectableByMouse |
             Qt.TextInteractionFlag.LinksAccessibleByMouse
@@ -373,6 +410,7 @@ class PresencePollingThread(QThread):
 
 class NotifierThread(QThread):
     new_message_signal = pyqtSignal(dict)
+    open_chat_signal = pyqtSignal(str)
     
     def __init__(self, main_window_ref):
         super().__init__()
@@ -640,6 +678,7 @@ class MainWindow(QMainWindow):
         
         self.notifier_thread = NotifierThread(self)
         self.notifier_thread.new_message_signal.connect(self.on_new_message)
+        self.notifier_thread.open_chat_signal.connect(self.force_open_chat)
         self.notifier_thread.start()
         
         self.presence_thread = PresencePollingThread()
@@ -746,6 +785,15 @@ class MainWindow(QMainWindow):
             self.current_next_cursor = None
             self.is_loading_history = False
             self.system_msg_lbl.hide()
+            
+            self.msg_list_effect = QGraphicsOpacityEffect(self.msg_list)
+            self.msg_list.setGraphicsEffect(self.msg_list_effect)
+            self.msg_list_anim = QPropertyAnimation(self.msg_list_effect, b"opacity")
+            self.msg_list_anim.setDuration(200)
+            self.msg_list_anim.setStartValue(0.0)
+            self.msg_list_anim.setEndValue(1.0)
+            self.msg_list_anim.start()
+
             
             if cid in self.unread_convs:
                 self.unread_convs.remove(cid)
@@ -969,9 +1017,13 @@ class MainWindow(QMainWindow):
 
 def main():
     parser = argparse.ArgumentParser(description="RobloxChats Desktop Client")
-    parser.add_argument("-m", "--minimized", action="store_true", help="Start minimized in system tray")
-    args = parser.parse_args()
+    parser.add_argument("-m", "--minimized", "--minimize", action="store_true", help="Start minimized in system tray")
+    parser.add_argument("--install", action="store_true", help="Install a .desktop shortcut for the current user")
+    args, _ = parser.parse_known_args()
     
+    if args.install:
+        install_desktop_shortcut()
+        
     app = QApplication(sys.argv)
     app.setQuitOnLastWindowClosed(False)
     app.setStyleSheet(QSS_CUSTOM_WIDGETS)
