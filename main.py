@@ -601,9 +601,6 @@ class NotifierThread(QThread):
                 return frozenset(c for c in caps if c != Capability.ON_CLICKED)
             notifier._backend.get_capabilities = patched_get_capabilities
             
-        def on_clicked():
-            pass
-            
         seen_messages = set()
         
         while api.my_user_id is None:
@@ -665,13 +662,20 @@ class NotifierThread(QThread):
                                     else:
                                         icon_obj = Icon(path=Path(avatar_path))
                                         
+                                def make_callback(cid):
+                                    def _cb():
+                                        self.open_chat_signal.emit(cid)
+                                    return _cb
+                                    
+                                cb = make_callback(conv_id)
+                                        
                                 await notifier.send(
                                     title=sender_display,
                                     message=content,
                                     icon=icon_obj,
                                     attachment=attachment_obj,
-                                    on_clicked=on_clicked,
-                                    buttons=[Button(title="Open in browser", on_pressed=on_clicked)]
+                                    on_clicked=cb,
+                                    buttons=[Button(title="Reply", on_pressed=cb)]
                                 )
             except:
                 pass
