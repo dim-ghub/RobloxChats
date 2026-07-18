@@ -35,7 +35,7 @@ from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QLineEdit, QPushButton, QListWidget, QLabel, QDialog,
     QSystemTrayIcon, QMenu, QSplitter, QMessageBox, QListWidgetItem, QSizePolicy, QStyledItemDelegate, QStyle, QFrame,
-    QGraphicsOpacityEffect, QGraphicsEffect
+    QGraphicsOpacityEffect, QGraphicsEffect, QStackedLayout
 )
 from PyQt6.QtGui import QIcon, QAction, QPixmap, QPainter, QPainterPath, QColor, QFont, QPalette, QBrush, QPen
 from PyQt6.QtCore import QThread, pyqtSignal, Qt, QTimer, QSize, QEvent, QPropertyAnimation, QEasingCurve, pyqtProperty, QVariantAnimation
