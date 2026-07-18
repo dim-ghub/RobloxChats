@@ -6,6 +6,7 @@ import requests
 import logging
 import sys
 import webbrowser
+from pathlib import Path
 from dotenv import load_dotenv
 from desktop_notifier import DesktopNotifier, Icon
 
@@ -115,7 +116,7 @@ async def main():
     
     # Initialize cross-platform notifier
     logo_path = await asyncio.to_thread(download_logo)
-    app_icon_obj = Icon(path=logo_path) if logo_path else None
+    app_icon_obj = Icon(path=Path(logo_path)) if logo_path else None
     
     notifier = DesktopNotifier(
         app_name="Roblox Chat",
@@ -179,7 +180,7 @@ async def main():
                             avatar_path = await asyncio.to_thread(download_avatar, avatar_url, sender_id)
                             
                         # Send desktop notification
-                        icon_obj = Icon(path=avatar_path) if avatar_path else None
+                        icon_obj = Icon(path=Path(avatar_path)) if avatar_path else None
                         try:
                             await notifier.send(
                                 title=title,
