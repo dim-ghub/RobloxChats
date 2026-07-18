@@ -728,10 +728,20 @@ class MainWindow(QMainWindow):
         
     def changeEvent(self, event):
         if event.type() in (QEvent.Type.ActivationChange, QEvent.Type.WindowStateChange):
-            self.app_active = self.isActiveWindow() and not self.isMinimized()
+            self.app_active = self.isActiveWindow() and self.isVisible() and not self.isMinimized()
             if self.app_active and hasattr(self, 'notifier_thread'):
                 self.notifier_thread.clear_requested = True
         super().changeEvent(event)
+        
+    def hideEvent(self, event):
+        self.app_active = False
+        super().hideEvent(event)
+        
+    def showEvent(self, event):
+        self.app_active = self.isActiveWindow() and not self.isMinimized()
+        if self.app_active and hasattr(self, 'notifier_thread'):
+            self.notifier_thread.clear_requested = True
+        super().showEvent(event)
         
     def setup_ui(self):
         central = QWidget()
