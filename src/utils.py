@@ -132,8 +132,9 @@ def install_desktop_shortcut():
     desktop_content = f"""[Desktop Entry]
 Type=Application
 Name=RobloxChats
+Comment=Chat with your Roblox friends
 Exec={launcher}
-{icon_line}
+Icon=robloxchats
 Terminal=false
 Categories=Network;Chat;
 """
