@@ -339,9 +339,10 @@ class MessageWidget(QWidget):
         
         content_lbl = QLabel(content)
         content_lbl.setWordWrap(True)
-        min_w = min(600, len(content) * 7)
-        if min_w > 100:
-            content_lbl.setMinimumWidth(min_w)
+        metrics = content_lbl.fontMetrics()
+        rect = metrics.boundingRect(0, 0, 600, 10000, Qt.TextFlag.TextWordWrap, content)
+        content_lbl.setMaximumWidth(rect.width() + 10)
+        
         content_lbl.setTextInteractionFlags(
             Qt.TextInteractionFlag.TextSelectableByMouse |
             Qt.TextInteractionFlag.LinksAccessibleByMouse
@@ -350,10 +351,10 @@ class MessageWidget(QWidget):
         
         if is_self:
             active_text = QApplication.palette().color(QPalette.ColorGroup.Active, QPalette.ColorRole.HighlightedText).name()
-            content_lbl.setStyleSheet(f"color: {active_text}; font-size: 14px;")
+            content_lbl.setStyleSheet(f"color: {active_text}; font-size: 14px; selection-background-color: white; selection-color: black;")
         else:
             active_text = QApplication.palette().color(QPalette.ColorGroup.Active, QPalette.ColorRole.WindowText).name()
-            content_lbl.setStyleSheet(f"color: {active_text}; font-size: 14px;")
+            content_lbl.setStyleSheet(f"color: {active_text}; font-size: 14px; selection-background-color: palette(highlight); selection-color: palette(highlighted-text);")
             
         bubble_layout.addWidget(content_lbl)
         
