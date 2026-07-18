@@ -803,14 +803,7 @@ class MainWindow(QMainWindow):
         right_widget = QWidget()
         right_widget.setLayout(right_panel)
         
-        self.msg_list_fade = FadeEffect(self.msg_list)
-        self.msg_list.setGraphicsEffect(self.msg_list_fade)
-        self.msg_list_fade_anim = QPropertyAnimation(self.msg_list_fade, b"progress")
-        self.msg_list_fade_anim.setDuration(150)
-        self.msg_list_fade_anim.setStartValue(0.0)
-        self.msg_list_fade_anim.setEndValue(1.0)
-        self.msg_list_fade_anim.setEasingCurve(QEasingCurve.Type.OutQuad)
-        
+
         splitter = QSplitter(Qt.Orientation.Horizontal)
         splitter.addWidget(sidebar_container)
         splitter.addWidget(right_widget)
