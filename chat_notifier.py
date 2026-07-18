@@ -5,12 +5,23 @@ import threading
 import requests
 import subprocess
 import logging
+import sys
 from dotenv import load_dotenv
 
 load_dotenv()
 
 # Configure basic logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(message)s')
+log_level = logging.DEBUG if os.environ.get("DEBUG") else logging.INFO
+logging.basicConfig(
+    level=log_level,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler("chat_notifier.log"),
+        logging.StreamHandler(sys.stdout)
+    ]
+)
+# Reduce urllib3 logging so it doesn't spam
+logging.getLogger("urllib3").setLevel(logging.WARNING)
 
 COOKIE = os.environ.get("ROBLOSECURITY")
 
