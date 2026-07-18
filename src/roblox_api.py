@@ -43,10 +43,11 @@ class RobloxAPI:
                 else:
                     logging.error(f"Failed to authenticate: {res.status_code} {res.text}")
                     return None
-            except requests.exceptions.RequestException as e:
-                logging.error(f"Network error in get_current_user (attempt {attempt+1}): {e}")
+            except requests.exceptions.RequestException:
+                logging.error(f"Failed to connect to Roblox API (attempt {attempt+1}/3). Retrying in 2 seconds...")
                 time.sleep(2)
         
+        logging.error("Failed to connect to Roblox API after 3 attempts.")
         raise ConnectionError("Roblox is down or no internet connection.")
 
     def fetch_conversations(self):
