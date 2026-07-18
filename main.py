@@ -38,7 +38,7 @@ from PyQt6.QtWidgets import (
     QGraphicsOpacityEffect, QGraphicsEffect
 )
 from PyQt6.QtGui import QIcon, QAction, QPixmap, QPainter, QPainterPath, QColor, QFont, QPalette, QBrush, QPen
-from PyQt6.QtCore import QThread, pyqtSignal, Qt, QTimer, QSize, QEvent, QPropertyAnimation, QEasingCurve, pyqtProperty
+from PyQt6.QtCore import QThread, pyqtSignal, Qt, QTimer, QSize, QEvent, QPropertyAnimation, QEasingCurve, pyqtProperty, QVariantAnimation
 
 from desktop_notifier import DesktopNotifier, Icon, Button, Attachment
 from desktop_notifier.common import Capability
