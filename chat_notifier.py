@@ -8,7 +8,7 @@ import sys
 import webbrowser
 from pathlib import Path
 from dotenv import load_dotenv
-from desktop_notifier import DesktopNotifier, Icon
+from desktop_notifier import DesktopNotifier, Icon, Button
 
 load_dotenv()
 
@@ -24,6 +24,10 @@ logging.basicConfig(
 )
 # Reduce urllib3 logging so it doesn't spam
 logging.getLogger("urllib3").setLevel(logging.WARNING)
+
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+ASSETS_DIR = os.path.join(SCRIPT_DIR, "assets")
+os.makedirs(ASSETS_DIR, exist_ok=True)
 
 COOKIE = os.environ.get("ROBLOSECURITY")
 
@@ -79,7 +83,7 @@ def get_user_avatar(user_id):
     return None
 
 def download_avatar(url, user_id):
-    path = f"/tmp/roblox_avatar_{user_id}.png"
+    path = os.path.join(ASSETS_DIR, f"roblox_avatar_{user_id}.png")
     if not os.path.exists(path):
         res = requests.get(url)
         if res.status_code == 200:
@@ -88,7 +92,7 @@ def download_avatar(url, user_id):
     return path
 
 def download_logo():
-    path = "/tmp/roblox_logo.png"
+    path = os.path.join(ASSETS_DIR, "roblox_logo.png")
     if not os.path.exists(path):
         try:
             res = requests.get("https://www.google.com/s2/favicons?domain=roblox.com&sz=128")
@@ -186,7 +190,9 @@ async def main():
                                 title=title,
                                 message=content,
                                 icon=icon_obj,
-                                on_clicked=on_clicked
+                                buttons=[
+                                    Button(title="Open in browser", on_pressed=on_clicked)
+                                ]
                             )
                         except Exception as ex:
                             logging.error(f"Notification error: {ex}")

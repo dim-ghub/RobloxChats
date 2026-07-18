@@ -3,3 +3,4 @@
 __pycache__/
 *.pyc
 chat_notifier.log
+assets/
