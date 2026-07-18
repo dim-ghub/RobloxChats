@@ -34,23 +34,10 @@ QListWidget {
     border: none;
     outline: none;
 }
-QListWidget#conv_list::item {
-    border-radius: 16px;
-    padding: 2px;
-}
-QListWidget#conv_list::item:selected {
-    background: rgba(128, 128, 128, 0.2);
-    border-radius: 16px;
-}
-QListWidget#conv_list::item:hover {
-    background: rgba(128, 128, 128, 0.1);
-    border-radius: 16px;
-}
-QListWidget#msg_list::item:selected {
+QListWidget#msg_list {
     background: transparent;
-}
-QListWidget#msg_list::item:hover {
-    background: transparent;
+    border: none;
+    outline: none;
 }
 /* Floating Sidebar Container */
 QWidget#sidebar_container {
@@ -202,12 +189,9 @@ class ConversationWidget(QWidget):
     def __init__(self, title, preview_text, avatar_path=None, presence_type=0, unread=False):
         super().__init__()
         
-        main_layout = QVBoxLayout()
-        main_layout.setContentsMargins(0, 0, 0, 0)
-        main_layout.setSpacing(0)
-        
         inner_layout = QHBoxLayout()
         inner_layout.setContentsMargins(12, 12, 12, 12)
+        inner_layout.setSpacing(14)
         
         avatar_lbl = QLabel()
         avatar_lbl.setPixmap(get_circular_pixmap(avatar_path, 40, presence_type, unread))
@@ -239,14 +223,7 @@ class ConversationWidget(QWidget):
         inner_layout.addLayout(text_layout)
         inner_layout.addStretch()
         
-        line = QFrame()
-        line.setFrameShape(QFrame.Shape.HLine)
-        line.setStyleSheet("background-color: rgba(128, 128, 128, 0.15); border: none; min-height: 1px; max-height: 1px; margin: 6px 12px;")
-        
-        main_layout.addLayout(inner_layout)
-        main_layout.addWidget(line)
-        
-        self.setLayout(main_layout)
+        self.setLayout(inner_layout)
 
 class MessageWidget(QWidget):
     def __init__(self, content, is_self, avatar_path=None, reply_data=None):
@@ -504,6 +481,30 @@ class NotifierThread(QThread):
                 await asyncio.sleep(1)
 
 
+class ChatListDelegate(QStyledItemDelegate):
+    def paint(self, painter, option, index):
+        painter.save()
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        
+        rect = option.rect
+        
+        if option.state & QStyle.StateFlag.State_Selected:
+            bg_color = QApplication.palette().color(QPalette.ColorGroup.Active, QPalette.ColorRole.Highlight)
+            painter.setBrush(bg_color)
+            painter.setPen(Qt.PenStyle.NoPen)
+            hl_rect = rect.adjusted(4, 4, -4, -4)
+            painter.drawRoundedRect(hl_rect, 12, 12)
+        elif option.state & QStyle.StateFlag.State_MouseOver:
+            painter.setBrush(QColor(128, 128, 128, 25))
+            painter.setPen(Qt.PenStyle.NoPen)
+            hl_rect = rect.adjusted(4, 4, -4, -4)
+            painter.drawRoundedRect(hl_rect, 12, 12)
+            
+        painter.setPen(QPen(QColor(128, 128, 128, 40), 1))
+        painter.drawLine(rect.left() + 16, rect.bottom(), rect.right() - 16, rect.bottom())
+        
+        painter.restore()
+
 class MainWindow(QMainWindow):
     def __init__(self, start_minimized):
         super().__init__()
@@ -546,6 +547,8 @@ class MainWindow(QMainWindow):
         
         self.conv_list = QListWidget()
         self.conv_list.setObjectName("conv_list")
+        self.conv_list.setVerticalScrollMode(QListWidget.ScrollMode.ScrollPerPixel)
+        self.conv_list.setItemDelegate(ChatListDelegate(self.conv_list))
         self.conv_list.itemClicked.connect(self.on_conv_selected)
         sidebar_layout.addWidget(self.conv_list)
         sidebar_container.setLayout(sidebar_layout)
