@@ -120,8 +120,12 @@ async def main():
     
     # Initialize cross-platform notifier
     logo_path = await asyncio.to_thread(download_logo)
-    app_icon_obj = Icon(path=Path(logo_path)) if logo_path else None
     
+    if sys.platform.startswith("linux"):
+        app_icon_obj = Icon(name=logo_path) if logo_path else None
+    else:
+        app_icon_obj = Icon(path=Path(logo_path)) if logo_path else None
+        
     notifier = DesktopNotifier(
         app_name="Roblox Chat",
         app_icon=app_icon_obj
@@ -184,12 +188,17 @@ async def main():
                             avatar_path = await asyncio.to_thread(download_avatar, avatar_url, sender_id)
                             
                         # Send desktop notification
-                        icon_obj = Icon(path=Path(avatar_path)) if avatar_path else None
+                        if sys.platform.startswith("linux"):
+                            icon_obj = Icon(name=avatar_path) if avatar_path else None
+                        else:
+                            icon_obj = Icon(path=Path(avatar_path)) if avatar_path else None
+                            
                         try:
                             await notifier.send(
                                 title=title,
                                 message=content,
                                 icon=icon_obj,
+                                on_clicked=on_clicked,
                                 buttons=[
                                     Button(title="Open in browser", on_pressed=on_clicked)
                                 ]
