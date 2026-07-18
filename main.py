@@ -125,40 +125,6 @@ def get_circular_pixmap(image_path, size=48, presence_type=0, unread=False):
     painter.end()
     return target
 
-class PopInEffect(QGraphicsEffect):
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self._progress = 0.0
-        
-    @pyqtProperty(float)
-    def progress(self):
-        return self._progress
-        
-    @progress.setter
-    def progress(self, val):
-        self._progress = val
-        self.update()
-        
-    def draw(self, painter):
-        if self._progress < 0.01:
-            return
-            
-        painter.save()
-        scale_val = 0.8 + (0.2 * self._progress)
-        opacity_val = min(1.0, self._progress * 1.25)
-        
-        painter.setOpacity(opacity_val)
-        
-        rect = self.sourceBoundingRect()
-        center = rect.center()
-        
-        painter.translate(center)
-        painter.scale(scale_val, scale_val)
-        painter.translate(-center)
-        
-        self.drawSource(painter)
-        painter.restore()
-
 class FadeEffect(QGraphicsEffect):
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -339,17 +305,15 @@ class MessageWidget(QWidget):
     def __init__(self, content, is_self, avatar_path=None, reply_data=None):
         super().__init__()
         
-        self.pop_eff = PopInEffect(self)
-        self.setGraphicsEffect(self.pop_eff)
+        self.main_layout = QHBoxLayout()
+        self.main_layout.setContentsMargins(4, 4, 4, 4)
         
-        self.pop_anim = QPropertyAnimation(self.pop_eff, b"progress")
+        self.pop_anim = QVariantAnimation(self)
         self.pop_anim.setDuration(300)
         self.pop_anim.setStartValue(0.0)
         self.pop_anim.setEndValue(1.0)
         self.pop_anim.setEasingCurve(QEasingCurve.Type.OutBack)
-        
-        layout = QHBoxLayout()
-        layout.setContentsMargins(4, 4, 4, 4)
+        self.pop_anim.valueChanged.connect(self._update_margins)
         
         message_column = QVBoxLayout()
         message_column.setSpacing(4)
@@ -445,23 +409,32 @@ class MessageWidget(QWidget):
         message_column.addLayout(bubble_align_layout)
         
         if is_self:
-            layout.addStretch()
-            layout.addLayout(message_column)
+            self.main_layout.addStretch()
+            self.main_layout.addLayout(message_column)
         else:
             if avatar_path:
                 avatar_lbl = QLabel()
                 pixmap = get_circular_pixmap(avatar_path, 32)
                 avatar_lbl.setPixmap(pixmap)
                 avatar_lbl.setFixedSize(32, 32)
-                layout.addWidget(avatar_lbl, alignment=Qt.AlignmentFlag.AlignTop)
+                self.main_layout.addWidget(avatar_lbl, alignment=Qt.AlignmentFlag.AlignTop)
             else:
                 spacer = QWidget()
                 spacer.setFixedSize(32, 32)
-                layout.addWidget(spacer)
-            layout.addLayout(message_column)
-            layout.addStretch()
+                self.main_layout.addWidget(spacer)
+            self.main_layout.addLayout(message_column)
+            self.main_layout.addStretch()
             
-        self.setLayout(layout)
+        self.setLayout(self.main_layout)
+        
+    def _update_margins(self, val):
+        scale = val
+        if scale < 0: scale = 0
+        
+        max_margin = 60
+        margin = int(max_margin * (1.0 - scale))
+        
+        self.main_layout.setContentsMargins(4 + margin, 4 + margin, 4 + margin, 4 + margin)
         
     def showEvent(self, event):
         super().showEvent(event)
