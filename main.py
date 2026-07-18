@@ -146,6 +146,7 @@ class BubbleWidget(QWidget):
         painter.setBrush(bg_color)
         painter.setPen(Qt.PenStyle.NoPen)
         painter.drawRoundedRect(self.rect(), 16, 16)
+        painter.end()
 
 class InputContainerWidget(QWidget):
     def paintEvent(self, event):
@@ -162,6 +163,7 @@ class InputContainerWidget(QWidget):
         painter.setBrush(bg_color)
         painter.setPen(pal.color(QPalette.ColorRole.Mid))
         painter.drawRoundedRect(self.rect(), 24, 24)
+        painter.end()
 
 class SendButton(QPushButton):
     def paintEvent(self, event):
@@ -179,6 +181,7 @@ class SendButton(QPushButton):
         painter.setBrush(bg_color)
         painter.setPen(Qt.PenStyle.NoPen)
         painter.drawRoundedRect(self.rect(), 16, 16)
+        painter.end()
         
         painter.setPen(pal.color(QPalette.ColorRole.ButtonText))
         font = painter.font()
