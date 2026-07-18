@@ -87,10 +87,16 @@ def download_avatar(url, user_id):
 
 def main():
     logging.info("Authenticating...")
-    my_user_id = get_current_user()
-    if not my_user_id:
-        logging.error("Failed to authenticate. Please check your ROBLOSECURITY cookie.")
-        return
+    my_user_id = None
+    while not my_user_id:
+        try:
+            my_user_id = get_current_user()
+            if not my_user_id:
+                logging.error("Failed to authenticate. Check your ROBLOSECURITY cookie. Retrying in 10 seconds...")
+                time.sleep(10)
+        except Exception as e:
+            logging.error(f"Network error during authentication: {e}. Retrying in 10 seconds...")
+            time.sleep(10)
         
     logging.info(f"Authenticated successfully as user {my_user_id}")
     
