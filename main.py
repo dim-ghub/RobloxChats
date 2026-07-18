@@ -441,6 +441,10 @@ class MessageWidget(QWidget):
     def set_group_pos(self, pos):
         if hasattr(self, 'bubble_container'):
             self.bubble_container.set_group_pos(pos)
+            
+        top_margin = 1 if pos in ("middle", "bottom") else 6
+        bottom_margin = 1 if pos in ("top", "middle") else 6
+        self.main_layout.setContentsMargins(4, top_margin, 4, bottom_margin)
 
     def update_width(self, w):
         max_w = int(w * 0.75)
