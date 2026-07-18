@@ -131,8 +131,14 @@ class BubbleWidget(QFrame):
         self.setObjectName("bubbleWidget")
         self.is_self = is_self
         self.is_highlighted = False
+        self.group_pos = "single"
         self.update_style()
         
+    def set_group_pos(self, pos):
+        if getattr(self, "group_pos", None) != pos:
+            self.group_pos = pos
+            self.update_style()
+            
     def update_style(self):
         if self.is_self:
             bg_color = QApplication.palette().color(QPalette.ColorGroup.Active, QPalette.ColorRole.Highlight)
@@ -146,13 +152,35 @@ class BubbleWidget(QFrame):
         if self.is_highlighted:
             bg_color = bg_color.lighter(130)
             
+        tl = tr = bl = br = 16
+        if self.is_self:
+            if getattr(self, "group_pos", "single") == "single":
+                br = 4
+            elif self.group_pos == "top":
+                br = 4
+            elif self.group_pos == "middle":
+                tr = 4
+                br = 4
+            elif self.group_pos == "bottom":
+                tr = 4
+        else:
+            if getattr(self, "group_pos", "single") == "single":
+                bl = 4
+            elif self.group_pos == "top":
+                bl = 4
+            elif self.group_pos == "middle":
+                tl = 4
+                bl = 4
+            elif self.group_pos == "bottom":
+                tl = 4
+                
         self.setStyleSheet(f"""
             #bubbleWidget {{
                 background-color: {bg_color.name()};
-                border-top-left-radius: 16px;
-                border-top-right-radius: 16px;
-                border-bottom-left-radius: {16 if self.is_self else 4}px;
-                border-bottom-right-radius: {4 if self.is_self else 16}px;
+                border-top-left-radius: {tl}px;
+                border-top-right-radius: {tr}px;
+                border-bottom-left-radius: {bl}px;
+                border-bottom-right-radius: {br}px;
             }}
         """)
 
@@ -275,13 +303,17 @@ class QuoteFrame(QFrame):
         super().mousePressEvent(event)
 
 class MessageWidget(QWidget):
-    reply_clicked = pyqtSignal(str)
-    def __init__(self, content, is_self, avatar_path=None, reply_data=None, animate=False):
+    reply_clicked = pyqtSignal(int)
+    
+    def __init__(self, content, is_self, avatar_path=None, reply_data=None, animate=False, sender_id=None, timestamp=None):
         super().__init__()
+        self.should_animate = animate
+        self.sender_id = sender_id
+        self.timestamp = timestamp
+        self._viewport_width = 800
         
         self.main_layout = QHBoxLayout()
         self.main_layout.setContentsMargins(4, 4, 4, 4)
-        self.should_animate = animate
         
         if self.should_animate:
             self.fade_eff = QGraphicsOpacityEffect(self)
@@ -405,6 +437,10 @@ class MessageWidget(QWidget):
             
         self.setLayout(self.main_layout)
         
+
+    def set_group_pos(self, pos):
+        if hasattr(self, 'bubble_container'):
+            self.bubble_container.set_group_pos(pos)
 
     def update_width(self, w):
         max_w = int(w * 0.75)
@@ -687,8 +723,8 @@ class MainWindow(QMainWindow):
         QTimer.singleShot(100, self.post_init)
         
     def changeEvent(self, event):
-        if event.type() == QEvent.Type.ActivationChange:
-            self.app_active = self.isActiveWindow()
+        if event.type() in (QEvent.Type.ActivationChange, QEvent.Type.WindowStateChange):
+            self.app_active = self.isActiveWindow() and not self.isMinimized()
             if self.app_active and hasattr(self, 'notifier_thread'):
                 self.notifier_thread.clear_requested = True
         super().changeEvent(event)
@@ -773,7 +809,7 @@ class MainWindow(QMainWindow):
         splitter = QSplitter(Qt.Orientation.Horizontal)
         splitter.addWidget(sidebar_container)
         splitter.addWidget(right_widget)
-        splitter.setSizes([260, 740])
+        splitter.setSizes([320, 680])
         splitter.setHandleWidth(1)
         
         layout.addWidget(splitter)
@@ -976,6 +1012,44 @@ class MainWindow(QMainWindow):
                 self.on_conv_selected(item)
                 break
                 
+    def _update_all_groupings(self):
+        for i in range(self.msg_list.count()):
+            item = self.msg_list.item(i)
+            widget = self.msg_list.itemWidget(item)
+            if not isinstance(widget, MessageWidget):
+                continue
+                
+            prev_w = None
+            for j in range(i-1, -1, -1):
+                pw = self.msg_list.itemWidget(self.msg_list.item(j))
+                if isinstance(pw, MessageWidget):
+                    prev_w = pw
+                    break
+                    
+            next_w = None
+            for j in range(i+1, self.msg_list.count()):
+                nw = self.msg_list.itemWidget(self.msg_list.item(j))
+                if isinstance(nw, MessageWidget):
+                    next_w = nw
+                    break
+                    
+            same_prev = False
+            if prev_w and getattr(prev_w, 'sender_id', None) == getattr(widget, 'sender_id', None) and getattr(widget, 'timestamp', None) and getattr(prev_w, 'timestamp', None):
+                if (widget.timestamp - prev_w.timestamp).total_seconds() <= 300:
+                    same_prev = True
+                    
+            same_next = False
+            if next_w and getattr(next_w, 'sender_id', None) == getattr(widget, 'sender_id', None) and getattr(widget, 'timestamp', None) and getattr(next_w, 'timestamp', None):
+                if (next_w.timestamp - widget.timestamp).total_seconds() <= 300:
+                    same_next = True
+            
+            if same_prev and same_next: pos = "middle"
+            elif same_prev: pos = "bottom"
+            elif same_next: pos = "top"
+            else: pos = "single"
+                
+            widget.set_group_pos(pos)
+
     def on_messages_loaded(self, msgs, user_data, next_cursor, is_prepend):
         self.current_next_cursor = next_cursor if next_cursor else None
         
@@ -1047,7 +1121,11 @@ class MainWindow(QMainWindow):
             msg_id = m.get("id")
             if msg_id:
                 item.setData(Qt.ItemDataRole.UserRole, msg_id)
-            widget = MessageWidget(content, is_self, avatar_path, reply_data, animate=True)
+            dt_val = None
+            if created_at_str:
+                try: dt_val = datetime.fromisoformat(created_at_str.replace("Z", "+00:00")).astimezone()
+                except: pass
+            widget = MessageWidget(content, is_self, avatar_path, reply_data, animate=True, sender_id=sender_id, timestamp=dt_val)
             widget.update_width(self.msg_list.viewport().width())
             widget.reply_clicked.connect(self.go_to_message)
             
@@ -1066,6 +1144,8 @@ class MainWindow(QMainWindow):
                 
             last_sender = sender_id
             
+        self._update_all_groupings()
+        
         if is_prepend:
             QApplication.processEvents()
             new_scroll_max = self.msg_list.verticalScrollBar().maximum()
@@ -1128,7 +1208,13 @@ class MainWindow(QMainWindow):
             msg_id = data.get("id")
             if msg_id:
                 item.setData(Qt.ItemDataRole.UserRole, msg_id)
-            widget = MessageWidget(data["content"], is_self, avatar_path, animate=True)
+                
+            dt_val = None
+            if data.get("created_at"):
+                try: dt_val = datetime.fromisoformat(data.get("created_at").replace("Z", "+00:00")).astimezone()
+                except: pass
+                
+            widget = MessageWidget(data["content"], is_self, avatar_path, None, animate=True, sender_id=str(data.get("sender_id")), timestamp=dt_val)
             widget.reply_clicked.connect(self.go_to_message)
             item.setSizeHint(widget.sizeHint())
             
