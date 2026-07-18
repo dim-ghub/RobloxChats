@@ -127,7 +127,7 @@ def install_desktop_shortcut():
         os.makedirs(icon_dir, exist_ok=True)
         dest_icon = os.path.join(icon_dir, "robloxchats.png")
         shutil.copy2(src_icon, dest_icon)
-        icon_line = f"Icon={dest_icon}"
+        icon_line = "Icon=robloxchats"
 
     desktop_content = f"""[Desktop Entry]
 Type=Application
