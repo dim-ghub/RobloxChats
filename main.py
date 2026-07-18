@@ -34,9 +34,12 @@ QListWidget {
     border: none;
     outline: none;
 }
+QListWidget#conv_list {
+    margin: 4px;
+}
 QListWidget#conv_list::item {
     border-radius: 8px;
-    margin: 2px 8px;
+    margin: 2px 4px;
 }
 QListWidget#conv_list::item:selected {
     background: palette(highlight);
@@ -128,7 +131,13 @@ class InputContainerWidget(QWidget):
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         
         pal = self.palette()
-        painter.setBrush(pal.color(QPalette.ColorRole.Base))
+        bg_color = pal.color(QPalette.ColorRole.Base)
+        if bg_color.lightness() < 128:
+            bg_color = bg_color.lighter(130)
+        else:
+            bg_color = bg_color.darker(105)
+            
+        painter.setBrush(bg_color)
         painter.setPen(pal.color(QPalette.ColorRole.Mid))
         painter.drawRoundedRect(self.rect(), 24, 24)
 
@@ -399,6 +408,13 @@ class NotifierThread(QThread):
             pass
                 
         while self.running:
+            if getattr(self, "clear_requested", False):
+                self.clear_requested = False
+                try:
+                    await notifier.clear_all()
+                except:
+                    pass
+                    
             try:
                 convs = await asyncio.to_thread(api.fetch_conversations)
                 for conv in convs[:5]:
@@ -477,6 +493,8 @@ class MainWindow(QMainWindow):
     def changeEvent(self, event):
         if event.type() == QEvent.Type.ActivationChange:
             self.app_active = self.isActiveWindow()
+            if self.app_active and hasattr(self, 'notifier_thread'):
+                self.notifier_thread.clear_requested = True
         super().changeEvent(event)
         
     def setup_ui(self):
@@ -533,7 +551,7 @@ class MainWindow(QMainWindow):
         input_container.setLayout(input_layout)
         
         bottom_panel = QVBoxLayout()
-        bottom_panel.setContentsMargins(24, 16, 24, 24)
+        bottom_panel.setContentsMargins(16, 8, 16, 16)
         bottom_panel.addWidget(input_container)
         
         right_panel.addWidget(self.msg_list)

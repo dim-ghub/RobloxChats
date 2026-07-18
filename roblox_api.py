@@ -73,15 +73,19 @@ class RobloxAPI:
             "is_typing": is_typing
         }
         try:
-            self.session.post(url, json=payload, timeout=5)
+            res = self.session.post(url, json=payload, timeout=5)
+            if self.check_csrf(res):
+                self.session.post(url, json=payload, timeout=5)
         except:
             pass
             
     def get_presence(self, user_ids):
         url = "https://presence.roblox.com/v1/presence/users"
-        payload = {"userIds": user_ids}
+        payload = {"userIds": [int(uid) for uid in user_ids]}
         try:
             res = self.session.post(url, json=payload, timeout=10)
+            if self.check_csrf(res):
+                res = self.session.post(url, json=payload, timeout=10)
             if res.status_code == 200:
                 return res.json().get("userPresences", [])
         except:
@@ -91,7 +95,9 @@ class RobloxAPI:
     def send_heartbeat(self):
         url = "https://apis.roblox.com/user-heartbeats-api/pulse"
         try:
-            self.session.post(url, timeout=5)
+            res = self.session.post(url, timeout=5)
+            if self.check_csrf(res):
+                self.session.post(url, timeout=5)
         except:
             pass
 
