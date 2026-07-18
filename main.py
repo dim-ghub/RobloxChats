@@ -37,7 +37,7 @@ from PyQt6.QtWidgets import (
     QSystemTrayIcon, QMenu, QSplitter, QMessageBox, QListWidgetItem, QSizePolicy, QStyledItemDelegate, QStyle, QFrame,
     QGraphicsOpacityEffect, QGraphicsEffect, QStackedLayout
 )
-from PyQt6.QtGui import QIcon, QAction, QPixmap, QPainter, QPainterPath, QColor, QFont, QPalette, QBrush, QPen
+from PyQt6.QtGui import QIcon, QAction, QPixmap, QPainter, QPainterPath, QColor, QFont, QPalette, QBrush, QPen, QFontMetrics
 from PyQt6.QtCore import QThread, pyqtSignal, Qt, QTimer, QSize, QEvent, QPropertyAnimation, QEasingCurve, pyqtProperty, QVariantAnimation
 
 from desktop_notifier import DesktopNotifier, Icon, Button, Attachment
