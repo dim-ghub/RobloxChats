@@ -413,7 +413,7 @@ class MessageWidget(QWidget):
             font.setPixelSize(14)
             metrics = QFontMetrics(font)
             rect = metrics.boundingRect(0, 0, max_w, 10000, Qt.TextFlag.TextWordWrap, self.raw_content)
-            self.content_lbl.setMaximumWidth(rect.width() + 10)
+            self.content_lbl.setFixedWidth(min(rect.width() + 10, max_w))
         if hasattr(self, 'bubble_container'):
             self.bubble_container.setMaximumWidth(max_w)
 
