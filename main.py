@@ -44,7 +44,8 @@ QListWidget#conv_list::item:selected {
 }
 /* Floating Sidebar Container */
 QWidget#sidebar_container {
-    background-color: transparent;
+    background-color: palette(button);
+    border-radius: 16px;
     margin: 8px;
 }
 """
@@ -67,6 +68,15 @@ def get_circular_pixmap(image_path, size=48, presence_type=0, unread=False):
     path = QPainterPath()
     path.addEllipse(0, 0, size, size)
     painter.setClipPath(path)
+    
+    # Draw a solid background so transparent avatars aren't invisible
+    bg_color = QApplication.palette().color(QPalette.ColorRole.Button)
+    if bg_color.lightness() < 128:
+        bg_color = bg_color.lighter(120)
+    else:
+        bg_color = bg_color.darker(110)
+    painter.fillPath(path, bg_color)
+    
     painter.drawPixmap(0, 0, pixmap)
     painter.setClipPath(QPainterPath()) # reset clip
     
@@ -102,7 +112,11 @@ class BubbleWidget(QWidget):
         if self.is_self:
             bg_color = pal.color(QPalette.ColorRole.Highlight)
         else:
-            bg_color = pal.color(QPalette.ColorRole.AlternateBase)
+            bg_color = pal.color(QPalette.ColorRole.Base)
+            if bg_color.lightness() < 128:
+                bg_color = bg_color.lighter(150)
+            else:
+                bg_color = bg_color.darker(110)
             
         painter.setBrush(bg_color)
         painter.setPen(Qt.PenStyle.NoPen)
