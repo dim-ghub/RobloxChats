@@ -34,16 +34,23 @@ QListWidget {
     border: none;
     outline: none;
 }
-QListWidget#conv_list {
-    margin: 4px;
-}
 QListWidget#conv_list::item {
     border-radius: 8px;
-    margin: 2px 4px;
+    padding: 2px;
 }
 QListWidget#conv_list::item:selected {
-    background: palette(highlight);
-    color: palette(highlighted-text);
+    background: rgba(128, 128, 128, 0.2);
+    border-radius: 8px;
+}
+QListWidget#conv_list::item:hover {
+    background: rgba(128, 128, 128, 0.1);
+    border-radius: 8px;
+}
+QListWidget#msg_list::item:selected {
+    background: transparent;
+}
+QListWidget#msg_list::item:hover {
+    background: transparent;
 }
 /* Floating Sidebar Container */
 QWidget#sidebar_container {
@@ -507,7 +514,7 @@ class MainWindow(QMainWindow):
         sidebar_container = QWidget()
         sidebar_container.setObjectName("sidebar_container")
         sidebar_layout = QVBoxLayout()
-        sidebar_layout.setContentsMargins(0, 0, 0, 0)
+        sidebar_layout.setContentsMargins(8, 8, 8, 8)
         
         self.conv_list = QListWidget()
         self.conv_list.setObjectName("conv_list")
@@ -519,6 +526,7 @@ class MainWindow(QMainWindow):
         right_panel.setContentsMargins(0, 0, 0, 0)
         
         self.msg_list = QListWidget()
+        self.msg_list.setObjectName("msg_list")
         self.msg_list.setVerticalScrollMode(QListWidget.ScrollMode.ScrollPerPixel)
         
         input_container = InputContainerWidget()
@@ -707,7 +715,7 @@ class MainWindow(QMainWindow):
             if created_at_str:
                 try:
                     dt = datetime.fromisoformat(created_at_str.replace("Z", "+00:00")).astimezone()
-                    if last_time is None or (dt - last_time).total_seconds() > 3600:
+                    if last_time is None or (dt - last_time).total_seconds() > 300:
                         ts_item = QListWidgetItem()
                         lbl = QLabel(dt.strftime("%B %d, %Y %I:%M %p"))
                         lbl.setStyleSheet("color: palette(placeholderText); font-size: 12px; font-weight: bold; padding: 16px 0px 8px 0px;")
