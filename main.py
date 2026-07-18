@@ -4,18 +4,18 @@ import os
 import argparse
 import asyncio
 import logging
-import dateutil.parser
 import time
+from datetime import datetime
 from pathlib import Path
 from dotenv import load_dotenv
 
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QLineEdit, QPushButton, QListWidget, QLabel, QDialog,
-    QSystemTrayIcon, QMenu, QSplitter, QMessageBox, QListWidgetItem, QSizePolicy
+    QSystemTrayIcon, QMenu, QSplitter, QMessageBox, QListWidgetItem, QSizePolicy, QStyledItemDelegate, QStyle
 )
-from PyQt6.QtGui import QIcon, QAction, QPixmap, QPainter, QPainterPath, QColor, QFont
-from PyQt6.QtCore import QThread, pyqtSignal, Qt, QTimer, QSize
+from PyQt6.QtGui import QIcon, QAction, QPixmap, QPainter, QPainterPath, QColor, QFont, QPalette, QBrush, QPen
+from PyQt6.QtCore import QThread, pyqtSignal, Qt, QTimer, QSize, QEvent
 
 from desktop_notifier import DesktopNotifier, Icon, Button, Attachment
 from desktop_notifier.common import Capability
@@ -34,71 +34,22 @@ QListWidget {
     border: none;
     outline: none;
 }
-
+QListWidget#conv_list::item {
+    border-radius: 8px;
+    margin: 2px 8px;
+}
+QListWidget#conv_list::item:selected {
+    background: palette(highlight);
+    color: palette(highlighted-text);
+}
 /* Floating Sidebar Container */
 QWidget#sidebar_container {
-    background-color: palette(base);
-    border-radius: 16px;
+    background-color: transparent;
     margin: 8px;
-}
-
-/* Chat Bubbles using standard Palette colors */
-MessageWidget[is_self="true"] QWidget#bubble_container {
-    background-color: palette(highlight);
-    border-radius: 16px;
-}
-MessageWidget[is_self="false"] QWidget#bubble_container {
-    background-color: palette(alternate-base);
-    border-radius: 16px;
-}
-QLabel#self_msg_text {
-    color: palette(highlighted-text);
-    font-size: 14px;
-    background: transparent;
-}
-QLabel#other_msg_text {
-    color: palette(text);
-    font-size: 14px;
-    background: transparent;
-}
-
-/* Timestamp */
-QLabel#timestamp_label {
-    color: palette(placeholderText);
-    font-size: 12px;
-    font-weight: bold;
-    padding: 16px 0px 8px 0px;
-}
-
-/* Input Area mimicking the AI app */
-QWidget#input_container {
-    background-color: palette(base);
-    border-radius: 24px;
-    border: 1px solid palette(mid);
-}
-QLineEdit#msg_input {
-    background: transparent;
-    color: palette(text);
-    border: none;
-    padding: 12px 16px;
-    font-size: 14px;
-}
-QPushButton#send_btn {
-    background-color: palette(button);
-    color: palette(button-text);
-    border-radius: 16px;
-    font-size: 16px;
-    font-weight: bold;
-    margin: 4px;
-    border: none;
-}
-QPushButton#send_btn:hover {
-    background-color: palette(highlight);
-    color: palette(highlighted-text);
 }
 """
 
-def get_circular_pixmap(image_path, size=48):
+def get_circular_pixmap(image_path, size=48, presence_type=0, unread=False):
     if not image_path or not os.path.exists(image_path):
         pixmap = QPixmap(size, size)
         pixmap.fill(Qt.GlobalColor.transparent)
@@ -117,8 +68,79 @@ def get_circular_pixmap(image_path, size=48):
     path.addEllipse(0, 0, size, size)
     painter.setClipPath(path)
     painter.drawPixmap(0, 0, pixmap)
+    painter.setClipPath(QPainterPath()) # reset clip
+    
+    # Draw Presence Dot
+    if presence_type > 0:
+        colors = {1: QColor("#00FF00"), 2: QColor("#0096FF"), 3: QColor("#FFA500")}
+        color = colors.get(presence_type, QColor("#00FF00"))
+        r = size // 5
+        painter.setBrush(color)
+        painter.setPen(QPen(QColor("#111111"), 2))
+        painter.drawEllipse(size - r*2 - 2, size - r*2 - 2, r*2, r*2)
+        
+    # Draw Unread Dot
+    if unread:
+        r = size // 5
+        painter.setBrush(QColor("#FF0000"))
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.drawEllipse(0, 0, r*2, r*2)
+        
     painter.end()
     return target
+
+class BubbleWidget(QWidget):
+    def __init__(self, is_self, parent=None):
+        super().__init__(parent)
+        self.is_self = is_self
+        
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        
+        pal = self.palette()
+        if self.is_self:
+            bg_color = pal.color(QPalette.ColorRole.Highlight)
+        else:
+            bg_color = pal.color(QPalette.ColorRole.AlternateBase)
+            
+        painter.setBrush(bg_color)
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.drawRoundedRect(self.rect(), 16, 16)
+
+class InputContainerWidget(QWidget):
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        
+        pal = self.palette()
+        painter.setBrush(pal.color(QPalette.ColorRole.Base))
+        painter.setPen(pal.color(QPalette.ColorRole.Mid))
+        painter.drawRoundedRect(self.rect(), 24, 24)
+
+class SendButton(QPushButton):
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        
+        pal = self.palette()
+        if self.isDown():
+            bg_color = pal.color(QPalette.ColorRole.Highlight).darker(110)
+        elif self.underMouse():
+            bg_color = pal.color(QPalette.ColorRole.Highlight)
+        else:
+            bg_color = pal.color(QPalette.ColorRole.Button)
+            
+        painter.setBrush(bg_color)
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.drawRoundedRect(self.rect(), 16, 16)
+        
+        painter.setPen(pal.color(QPalette.ColorRole.ButtonText))
+        font = painter.font()
+        font.setPixelSize(18)
+        font.setBold(True)
+        painter.setFont(font)
+        painter.drawText(self.rect(), Qt.AlignmentFlag.AlignCenter, self.text())
 
 class SettingsDialog(QDialog):
     def __init__(self, parent=None):
@@ -148,34 +170,27 @@ class SettingsDialog(QDialog):
         return self.cookie_input.text().strip()
 
 class ConversationWidget(QWidget):
-    def __init__(self, title, preview_text, avatar_path=None, presence_type=0):
+    def __init__(self, title, preview_text, avatar_path=None, presence_type=0, unread=False):
         super().__init__()
         layout = QHBoxLayout()
         layout.setContentsMargins(12, 12, 12, 12)
         
-        # Avatar with Presence Dot
         avatar_lbl = QLabel()
-        avatar_lbl.setPixmap(get_circular_pixmap(avatar_path, 40))
+        avatar_lbl.setPixmap(get_circular_pixmap(avatar_path, 40, presence_type, unread))
         avatar_lbl.setFixedSize(40, 40)
         
         text_layout = QVBoxLayout()
         text_layout.setSpacing(2)
         
-        # Presence status string
-        presence_str = ""
-        if presence_type == 1:
-            presence_str = " (Online)"
-        elif presence_type == 2:
-            presence_str = " (In-Game)"
-        elif presence_type == 3:
-            presence_str = " (Studio)"
-            
-        title_lbl = QLabel(f"{title}{presence_str}")
-        title_lbl.setFont(QFont("Segoe UI", 11, QFont.Weight.Bold))
+        title_lbl = QLabel(title)
+        font = QFont("Segoe UI", 11)
+        font.setBold(unread)
+        title_lbl.setFont(font)
+        title_lbl.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
         
         preview_lbl = QLabel()
         preview_lbl.setFont(QFont("Segoe UI", 10))
-        preview_lbl.setStyleSheet("color: palette(placeholderText);")
+        preview_lbl.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
         
         metrics = preview_lbl.fontMetrics()
         preview_text = preview_text.replace("\n", " ")
@@ -195,7 +210,6 @@ class ConversationWidget(QWidget):
 class MessageWidget(QWidget):
     def __init__(self, content, is_self, avatar_path=None):
         super().__init__()
-        self.setProperty("is_self", "true" if is_self else "false")
         
         layout = QHBoxLayout()
         layout.setContentsMargins(4, 4, 4, 4)
@@ -205,12 +219,12 @@ class MessageWidget(QWidget):
         
         content_lbl = QLabel(content)
         content_lbl.setWordWrap(True)
-        content_lbl.setObjectName("self_msg_text" if is_self else "other_msg_text")
+        # Force text color using styling to inherit palette correctly
+        content_lbl.setStyleSheet(f"color: {'palette(highlighted-text)' if is_self else 'palette(text)'}; background: transparent;")
         
         bubble_layout.addWidget(content_lbl)
         
-        bubble_container = QWidget()
-        bubble_container.setObjectName("bubble_container")
+        bubble_container = BubbleWidget(is_self)
         bubble_container.setLayout(bubble_layout)
         bubble_container.setSizePolicy(QSizePolicy.Policy.Maximum, QSizePolicy.Policy.Preferred)
         
@@ -240,17 +254,22 @@ def extract_name(user_id, user_data_dict):
     return str_id
 
 def download_avatar_sync(user_id):
+    path = os.path.join(ASSETS_DIR, f"roblox_avatar_{user_id}.png")
+    # Refresh if older than 1 hour
+    if os.path.exists(path):
+        mtime = os.path.getmtime(path)
+        if time.time() - mtime < 3600:
+            return path
+            
     avatar_url = api.get_user_avatar(user_id)
     if avatar_url:
-        path = os.path.join(ASSETS_DIR, f"roblox_avatar_{user_id}.png")
-        if not os.path.exists(path):
-            try:
-                res = requests.get(avatar_url, timeout=10)
-                if res.status_code == 200:
-                    with open(path, "wb") as f:
-                        f.write(res.content)
-            except Exception as e:
-                logging.error(f"Avatar dl fail: {e}")
+        try:
+            res = requests.get(avatar_url, timeout=10)
+            if res.status_code == 200:
+                with open(path, "wb") as f:
+                    f.write(res.content)
+        except Exception as e:
+            logging.error(f"Avatar dl fail: {e}")
         return path
     return None
 
@@ -309,9 +328,10 @@ class PresencePollingThread(QThread):
 class NotifierThread(QThread):
     new_message_signal = pyqtSignal(dict)
     
-    def __init__(self, parent=None):
-        super().__init__(parent)
+    def __init__(self, main_window_ref):
+        super().__init__()
         self.running = True
+        self.main_window_ref = main_window_ref
         
     def run(self):
         asyncio.run(self.main_loop())
@@ -391,24 +411,26 @@ class NotifierThread(QThread):
                                 "created_at": m.get("created_at")
                             })
                             
-                            avatar_path = await asyncio.to_thread(download_avatar_sync, sender_id)
-                            icon_obj = None
-                            attachment_obj = None
-                            if avatar_path:
-                                if sys.platform.startswith("linux"):
-                                    icon_obj = Icon(name=logo_path)
-                                    attachment_obj = Attachment(path=Path(avatar_path))
-                                else:
-                                    icon_obj = Icon(path=Path(avatar_path))
-                                    
-                            await notifier.send(
-                                title=sender_display,
-                                message=content,
-                                icon=icon_obj,
-                                attachment=attachment_obj,
-                                on_clicked=on_clicked,
-                                buttons=[Button(title="Open in browser", on_pressed=on_clicked)]
-                            )
+                            # Check if window is focused/active
+                            if not getattr(self.main_window_ref, "app_active", False):
+                                avatar_path = await asyncio.to_thread(download_avatar_sync, sender_id)
+                                icon_obj = None
+                                attachment_obj = None
+                                if avatar_path:
+                                    if sys.platform.startswith("linux"):
+                                        icon_obj = Icon(name=logo_path)
+                                        attachment_obj = Attachment(path=Path(avatar_path))
+                                    else:
+                                        icon_obj = Icon(path=Path(avatar_path))
+                                        
+                                await notifier.send(
+                                    title=sender_display,
+                                    message=content,
+                                    icon=icon_obj,
+                                    attachment=attachment_obj,
+                                    on_clicked=on_clicked,
+                                    buttons=[Button(title="Open in browser", on_pressed=on_clicked)]
+                                )
             except:
                 pass
                 
@@ -422,6 +444,7 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.setWindowTitle("RobloxChats")
         self.resize(1000, 700)
+        self.app_active = True
         
         self.setup_ui()
         
@@ -437,19 +460,25 @@ class MainWindow(QMainWindow):
             
         QTimer.singleShot(100, self.post_init)
         
+    def changeEvent(self, event):
+        if event.type() == QEvent.Type.ActivationChange:
+            self.app_active = self.isActiveWindow()
+        super().changeEvent(event)
+        
     def setup_ui(self):
         central = QWidget()
         layout = QHBoxLayout()
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
         
-        # Floating Sidebar
+        # Sidebar with custom delegate
         sidebar_container = QWidget()
         sidebar_container.setObjectName("sidebar_container")
         sidebar_layout = QVBoxLayout()
         sidebar_layout.setContentsMargins(0, 0, 0, 0)
         
         self.conv_list = QListWidget()
+        self.conv_list.setObjectName("conv_list")
         self.conv_list.itemClicked.connect(self.on_conv_selected)
         sidebar_layout.addWidget(self.conv_list)
         sidebar_container.setLayout(sidebar_layout)
@@ -460,8 +489,7 @@ class MainWindow(QMainWindow):
         self.msg_list = QListWidget()
         self.msg_list.setVerticalScrollMode(QListWidget.ScrollMode.ScrollPerPixel)
         
-        input_container = QWidget()
-        input_container.setObjectName("input_container")
+        input_container = InputContainerWidget()
         input_layout = QHBoxLayout()
         input_layout.setContentsMargins(0, 0, 0, 0)
         input_layout.setSpacing(0)
@@ -469,17 +497,25 @@ class MainWindow(QMainWindow):
         self.msg_input = QLineEdit()
         self.msg_input.setObjectName("msg_input")
         self.msg_input.setPlaceholderText("Send a message")
+        self.msg_input.setStyleSheet("background: transparent; color: palette(text); border: none; padding: 12px 16px; font-size: 14px;")
         self.msg_input.returnPressed.connect(self.send_message)
         self.msg_input.textChanged.connect(self.on_input_changed)
         
-        self.send_btn = QPushButton("↑")
-        self.send_btn.setObjectName("send_btn")
+        self.send_btn = SendButton("↑")
         self.send_btn.setFixedSize(32, 32)
         self.send_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.send_btn.clicked.connect(self.send_message)
         
+        # Add margins so button doesn't hug edge
         input_layout.addWidget(self.msg_input)
-        input_layout.addWidget(self.send_btn)
+        
+        btn_wrapper = QWidget()
+        btn_layout = QVBoxLayout()
+        btn_layout.setContentsMargins(4, 4, 4, 4)
+        btn_layout.addWidget(self.send_btn)
+        btn_wrapper.setLayout(btn_layout)
+        input_layout.addWidget(btn_wrapper)
+        
         input_container.setLayout(input_layout)
         
         bottom_panel = QVBoxLayout()
@@ -505,11 +541,12 @@ class MainWindow(QMainWindow):
         self.current_conv_id = None
         self.conv_map = {}
         self.presence_map = {}
+        self.unread_convs = set()
         
     def post_init(self):
         self.setup_tray()
         
-        self.notifier_thread = NotifierThread()
+        self.notifier_thread = NotifierThread(self)
         self.notifier_thread.new_message_signal.connect(self.on_new_message)
         self.notifier_thread.start()
         
@@ -582,9 +619,10 @@ class MainWindow(QMainWindow):
                         break
 
             preview = conv.get("preview_message", {}).get("content", "No messages yet")
+            unread = cid in self.unread_convs
             
             item = QListWidgetItem()
-            widget = ConversationWidget(title, preview, avatar_path, presence_type)
+            widget = ConversationWidget(title, preview, avatar_path, presence_type, unread)
             item.setSizeHint(widget.sizeHint())
             item.setData(Qt.ItemDataRole.UserRole, cid)
             
@@ -594,7 +632,6 @@ class MainWindow(QMainWindow):
         self.presence_thread.set_user_ids(tracked_users)
             
     def on_presence_updated(self, pres_dict):
-        # Only refresh if presence changed
         changed = False
         for uid, p_type in pres_dict.items():
             if self.presence_map.get(uid) != p_type:
@@ -607,6 +644,10 @@ class MainWindow(QMainWindow):
         cid = item.data(Qt.ItemDataRole.UserRole)
         if cid:
             self.current_conv_id = cid
+            if cid in self.unread_convs:
+                self.unread_convs.remove(cid)
+                self.refresh_chats()
+                
             self.msg_list.clear()
             loading_item = QListWidgetItem()
             lbl = QLabel("Loading messages...")
@@ -632,17 +673,20 @@ class MainWindow(QMainWindow):
             created_at_str = m.get("created_at")
             
             if created_at_str:
-                dt = dateutil.parser.isoparse(created_at_str)
-                if last_time is None or (dt - last_time).total_seconds() > 3600:
-                    ts_item = QListWidgetItem()
-                    lbl = QLabel(dt.strftime("%B %d, %Y %I:%M %p"))
-                    lbl.setObjectName("timestamp_label")
-                    lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-                    ts_item.setSizeHint(lbl.sizeHint())
-                    self.msg_list.addItem(ts_item)
-                    self.msg_list.setItemWidget(ts_item, lbl)
-                    last_sender = None
-                last_time = dt
+                try:
+                    dt = datetime.fromisoformat(created_at_str.replace("Z", "+00:00")).astimezone()
+                    if last_time is None or (dt - last_time).total_seconds() > 3600:
+                        ts_item = QListWidgetItem()
+                        lbl = QLabel(dt.strftime("%B %d, %Y %I:%M %p"))
+                        lbl.setStyleSheet("color: palette(placeholderText); font-size: 12px; font-weight: bold; padding: 16px 0px 8px 0px;")
+                        lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+                        ts_item.setSizeHint(lbl.sizeHint())
+                        self.msg_list.addItem(ts_item)
+                        self.msg_list.setItemWidget(ts_item, lbl)
+                        last_sender = None
+                    last_time = dt
+                except:
+                    pass
             
             is_self = (sender_id == str(api.my_user_id))
             
@@ -674,7 +718,6 @@ class MainWindow(QMainWindow):
             
     def send_typing_indicator(self):
         if self.current_conv_id:
-            # We fire and forget this network request on a throwaway thread to avoid blocking GUI
             t = QThread.create(lambda: api.update_typing_status(self.current_conv_id, True))
             t.start()
             
@@ -685,40 +728,35 @@ class MainWindow(QMainWindow):
         
         self.msg_input.clear()
         
-        # Optimistic UI update
         item = QListWidgetItem()
         widget = MessageWidget(text, True, None)
-        widget.style().unpolish(widget)
-        widget.style().polish(widget)
         item.setSizeHint(widget.sizeHint())
         self.msg_list.addItem(item)
         self.msg_list.setItemWidget(item, widget)
         self.msg_list.scrollToBottom()
         
-        # Background send
         self.sender_thread = MessageSenderThread(self.current_conv_id, text)
-        # We no longer reload everything on success since we optimistically updated.
-        # But we could optionally handle failure if success == False
         self.sender_thread.start()
         
     def on_new_message(self, data):
-        if self.current_conv_id == data["conv_id"]:
+        cid = data["conv_id"]
+        if self.current_conv_id == cid:
             is_self = data.get("sender_id") == str(api.my_user_id)
             if is_self:
-                return # Already handled by optimistic UI update
+                return 
                 
             avatar_path = os.path.join(ASSETS_DIR, f"roblox_avatar_{data.get('sender_id')}.png")
             item = QListWidgetItem()
             widget = MessageWidget(data["content"], is_self, avatar_path)
-            widget.style().unpolish(widget)
-            widget.style().polish(widget)
             item.setSizeHint(widget.sizeHint())
             
             self.msg_list.addItem(item)
             self.msg_list.setItemWidget(item, widget)
             self.msg_list.scrollToBottom()
+        else:
+            self.unread_convs.add(cid)
             
-            self.refresh_chats()
+        self.refresh_chats()
             
     def setup_tray(self):
         self.tray = QSystemTrayIcon(self)
@@ -754,7 +792,6 @@ class MainWindow(QMainWindow):
     def closeEvent(self, event):
         event.ignore()
         self.hide()
-        # Removed tray notification as requested
 
 def main():
     parser = argparse.ArgumentParser(description="RobloxChats Desktop Client")
