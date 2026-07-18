@@ -4,12 +4,13 @@ import os
 import argparse
 import asyncio
 import logging
+import dateutil.parser
 from pathlib import Path
 from dotenv import load_dotenv
 
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
-    QTabWidget, QLineEdit, QPushButton, QListWidget, QLabel,
+    QLineEdit, QPushButton, QListWidget, QLabel, QDialog,
     QSystemTrayIcon, QMenu, QSplitter, QMessageBox, QListWidgetItem, QSizePolicy
 )
 from PyQt6.QtGui import QIcon, QAction, QPixmap, QPainter, QPainterPath, QColor, QFont
@@ -26,22 +27,8 @@ ASSETS_DIR = os.path.join(SCRIPT_DIR, "assets")
 os.makedirs(ASSETS_DIR, exist_ok=True)
 
 QSS_THEME = """
-QMainWindow, QTabWidget::pane {
+QMainWindow {
     background-color: #313338;
-    border: none;
-}
-QTabBar::tab {
-    background-color: #1e1f22;
-    color: #949ba4;
-    padding: 8px 16px;
-    border: none;
-    border-top-left-radius: 8px;
-    border-top-right-radius: 8px;
-    margin-right: 2px;
-}
-QTabBar::tab:selected {
-    background-color: #313338;
-    color: #ffffff;
 }
 QWidget {
     color: #dbdee1;
@@ -67,28 +54,77 @@ QPushButton:hover {
     background-color: #4752c4;
 }
 QListWidget {
-    background-color: #2b2d31;
+    background-color: #313338;
     border: none;
     outline: none;
 }
-QListWidget::item:selected {
+QListWidget#conv_list {
+    background-color: #2b2d31;
+}
+QListWidget#conv_list::item:selected {
     background-color: #3f4147;
     border-radius: 4px;
 }
-QListWidget::item:hover {
+QListWidget#conv_list::item:hover {
     background-color: #35373c;
     border-radius: 4px;
 }
 QSplitter::handle {
     background-color: #1e1f22;
-    width: 2px;
+    width: 1px;
+}
+
+/* Scrollbars */
+QScrollBar:vertical {
+    background: #2b2d31;
+    width: 12px;
+    margin: 0px;
+}
+QScrollBar::handle:vertical {
+    background: #1a1b1e;
+    min-height: 20px;
+    border-radius: 6px;
+    margin: 2px;
+}
+QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
+    height: 0px;
+}
+QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {
+    background: none;
+}
+
+/* MessageWidget styling via property */
+MessageWidget[is_self="true"] QWidget#bubble_container {
+    background-color: #4752c4;
+    border-radius: 8px;
+}
+MessageWidget[is_self="false"] QWidget#bubble_container {
+    background-color: #383a40;
+    border-radius: 8px;
+}
+
+/* Timestamp */
+QLabel#timestamp_label {
+    color: #949ba4;
+    font-size: 12px;
+    font-weight: bold;
+    padding: 16px 0px 8px 0px;
+}
+
+/* Input box */
+QLineEdit#msg_input {
+    background-color: #383a40;
+    color: #dbdee1;
+    border: none;
+    border-radius: 20px; /* More rounded */
+    padding: 12px 16px;
 }
 """
 
 def get_circular_pixmap(image_path, size=48):
     if not image_path or not os.path.exists(image_path):
         pixmap = QPixmap(size, size)
-        pixmap.fill(QColor("#313338"))
+        pixmap.fill(QColor("#1e1f22"))
     else:
         pixmap = QPixmap(image_path).scaled(
             size, size, Qt.AspectRatioMode.KeepAspectRatioByExpanding, Qt.TransformationMode.SmoothTransformation
@@ -103,15 +139,44 @@ def get_circular_pixmap(image_path, size=48):
     path = QPainterPath()
     path.addEllipse(0, 0, size, size)
     painter.setClipPath(path)
+    # Background for transparent images
+    painter.fillPath(path, QColor("#1e1f22"))
     painter.drawPixmap(0, 0, pixmap)
     painter.end()
     return target
+
+class SettingsDialog(QDialog):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("RobloxChats Settings")
+        self.setFixedSize(400, 200)
+        
+        layout = QVBoxLayout()
+        self.cookie_input = QLineEdit()
+        self.cookie_input.setPlaceholderText("Enter .ROBLOSECURITY cookie...")
+        self.cookie_input.setEchoMode(QLineEdit.EchoMode.Password)
+        
+        if os.environ.get("ROBLOSECURITY"):
+            self.cookie_input.setText(os.environ.get("ROBLOSECURITY"))
+        
+        self.login_btn = QPushButton("Save & Login")
+        self.login_btn.clicked.connect(self.accept)
+        
+        layout.addStretch()
+        layout.addWidget(QLabel("Roblox Cookie (.ROBLOSECURITY):"))
+        layout.addWidget(self.cookie_input)
+        layout.addWidget(self.login_btn)
+        layout.addStretch()
+        self.setLayout(layout)
+        
+    def get_cookie(self):
+        return self.cookie_input.text().strip()
 
 class ConversationWidget(QWidget):
     def __init__(self, title, preview_text, avatar_path=None):
         super().__init__()
         layout = QHBoxLayout()
-        layout.setContentsMargins(8, 8, 8, 8)
+        layout.setContentsMargins(12, 12, 12, 12)
         
         avatar_lbl = QLabel()
         avatar_lbl.setPixmap(get_circular_pixmap(avatar_path, 40))
@@ -122,13 +187,12 @@ class ConversationWidget(QWidget):
         
         title_lbl = QLabel(title)
         title_lbl.setFont(QFont("Segoe UI", 11, QFont.Weight.Bold))
-        title_lbl.setStyleSheet("color: #dbdee1;")
+        title_lbl.setStyleSheet("color: #dbdee1; background: transparent;")
         
         preview_lbl = QLabel()
-        preview_lbl.setStyleSheet("color: #949ba4;")
+        preview_lbl.setStyleSheet("color: #949ba4; background: transparent;")
         preview_lbl.setFont(QFont("Segoe UI", 10))
         
-        # Elide text
         metrics = preview_lbl.fontMetrics()
         preview_text = preview_text.replace("\n", " ")
         elided = metrics.elidedText(preview_text, Qt.TextElideMode.ElideRight, 170)
@@ -145,22 +209,18 @@ class ConversationWidget(QWidget):
         self.setLayout(layout)
 
 class MessageWidget(QWidget):
-    def __init__(self, content, is_self, sender_name=None, avatar_path=None):
+    def __init__(self, content, is_self, avatar_path=None):
         super().__init__()
+        self.setProperty("is_self", "true" if is_self else "false")
+        
         layout = QHBoxLayout()
         layout.setContentsMargins(4, 4, 4, 4)
         
-        bubble_color = "#4752c4" if is_self else "#383a40"
         text_color = "#ffffff" if is_self else "#dbdee1"
         
         bubble_layout = QVBoxLayout()
         bubble_layout.setContentsMargins(12, 8, 12, 8)
         
-        if not is_self and sender_name:
-            name_lbl = QLabel(sender_name)
-            name_lbl.setStyleSheet("color: #949ba4; font-size: 11px; font-weight: bold;")
-            bubble_layout.addWidget(name_lbl)
-            
         content_lbl = QLabel(content)
         content_lbl.setWordWrap(True)
         content_lbl.setStyleSheet(f"color: {text_color}; font-size: 14px; background: transparent;")
@@ -168,13 +228,8 @@ class MessageWidget(QWidget):
         bubble_layout.addWidget(content_lbl)
         
         bubble_container = QWidget()
+        bubble_container.setObjectName("bubble_container")
         bubble_container.setLayout(bubble_layout)
-        bubble_container.setStyleSheet(f"""
-            QWidget {{
-                background-color: {bubble_color};
-                border-radius: 8px;
-            }}
-        """)
         bubble_container.setSizePolicy(QSizePolicy.Policy.Maximum, QSizePolicy.Policy.Preferred)
         
         if is_self:
@@ -183,9 +238,13 @@ class MessageWidget(QWidget):
         else:
             if avatar_path:
                 avatar_lbl = QLabel()
-                avatar_lbl.setPixmap(get_circular_pixmap(avatar_path, 32))
-                avatar_lbl.setFixedSize(32, 32)
-                layout.addWidget(avatar_lbl, alignment=Qt.AlignmentFlag.AlignTop)
+                avatar_lbl.setPixmap(get_circular_pixmap(avatar_path, 36))
+                avatar_lbl.setFixedSize(36, 36)
+                layout.addWidget(avatar_lbl, alignment=Qt.AlignmentFlag.AlignBottom)
+            else:
+                spacer = QWidget()
+                spacer.setFixedSize(36, 36)
+                layout.addWidget(spacer)
             layout.addWidget(bubble_container)
             layout.addStretch()
             
@@ -213,6 +272,30 @@ def download_avatar_sync(user_id):
         return path
     return None
 
+class ChatLoaderThread(QThread):
+    finished_signal = pyqtSignal(list, dict)
+    
+    def __init__(self, conv_id, conv_map):
+        super().__init__()
+        self.conv_id = conv_id
+        self.conv_map = conv_map
+        
+    def run(self):
+        msgs = api.fetch_messages(self.conv_id)
+        user_data = self.conv_map.get(self.conv_id, {}).get("user_data", {})
+        self.finished_signal.emit(msgs, user_data)
+
+class MessageSenderThread(QThread):
+    finished_signal = pyqtSignal(bool)
+    
+    def __init__(self, conv_id, text):
+        super().__init__()
+        self.conv_id = conv_id
+        self.text = text
+        
+    def run(self):
+        success = api.send_message(self.conv_id, self.text)
+        self.finished_signal.emit(success)
 
 class NotifierThread(QThread):
     new_message_signal = pyqtSignal(dict)
@@ -297,7 +380,8 @@ class NotifierThread(QThread):
                                 "conv_id": conv_id,
                                 "sender_id": str(sender_id),
                                 "sender_display": sender_display,
-                                "content": content
+                                "content": content,
+                                "created_at": m.get("created_at")
                             })
                             
                             avatar_path = await asyncio.to_thread(download_avatar_sync, sender_id)
@@ -330,92 +414,40 @@ class MainWindow(QMainWindow):
     def __init__(self, start_minimized):
         super().__init__()
         self.setWindowTitle("RobloxChats")
-        self.resize(900, 650)
+        self.resize(1000, 700)
         
-        self.tabs = QTabWidget()
-        self.setCentralWidget(self.tabs)
-        
-        self.setup_login_tab()
-        self.setup_chat_tab()
+        self.setup_ui()
         
         load_dotenv()
         self.cookie = os.environ.get("ROBLOSECURITY")
-        if self.cookie:
-            self.cookie_input.setText(self.cookie)
-            
+        
         if not start_minimized:
             self.show()
             
         QTimer.singleShot(100, self.post_init)
         
-    def post_init(self):
-        self.setup_tray()
-        
-        self.notifier_thread = NotifierThread()
-        self.notifier_thread.new_message_signal.connect(self.on_new_message)
-        self.notifier_thread.start()
-        
-        if self.cookie:
-            self.login()
-            
-    def setup_login_tab(self):
-        tab = QWidget()
-        layout = QVBoxLayout()
-        
-        self.cookie_input = QLineEdit()
-        self.cookie_input.setPlaceholderText("Enter .ROBLOSECURITY cookie...")
-        self.cookie_input.setEchoMode(QLineEdit.EchoMode.Password)
-        
-        self.login_btn = QPushButton("Login")
-        self.login_btn.clicked.connect(self.login)
-        
-        self.status_label = QLabel("Not logged in.")
-        
-        layout.addStretch()
-        layout.addWidget(QLabel("Roblox Cookie (.ROBLOSECURITY):"))
-        layout.addWidget(self.cookie_input)
-        layout.addWidget(self.login_btn)
-        layout.addWidget(self.status_label)
-        layout.addStretch()
-        
-        tab.setLayout(layout)
-        self.tabs.addTab(tab, "Login")
-        
-    def login(self):
-        cookie = self.cookie_input.text().strip()
-        if not cookie: return
-        api.update_cookie(cookie)
-        
-        with open(".env", "w") as f:
-            f.write(f"ROBLOSECURITY={cookie}\n")
-            
-        user_id = api.get_current_user()
-        if user_id:
-            self.status_label.setText(f"Logged in successfully. User ID: {user_id}")
-            self.refresh_chats()
-            self.tabs.setCurrentIndex(1)
-        else:
-            self.status_label.setText("Login failed. Check cookie validity.")
-            
-    def setup_chat_tab(self):
-        tab = QWidget()
+    def setup_ui(self):
+        central = QWidget()
         layout = QHBoxLayout()
         layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
         
         self.conv_list = QListWidget()
+        self.conv_list.setObjectName("conv_list")
         self.conv_list.itemClicked.connect(self.on_conv_selected)
         
         right_panel = QVBoxLayout()
+        right_panel.setContentsMargins(0, 0, 0, 0)
         
         self.msg_list = QListWidget()
-        self.msg_list.setStyleSheet("background-color: #313338;")
         self.msg_list.setVerticalScrollMode(QListWidget.ScrollMode.ScrollPerPixel)
         
         input_layout = QHBoxLayout()
-        input_layout.setContentsMargins(16, 8, 16, 16)
+        input_layout.setContentsMargins(24, 16, 24, 24)
         
         self.msg_input = QLineEdit()
-        self.msg_input.setPlaceholderText("Message...")
+        self.msg_input.setObjectName("msg_input")
+        self.msg_input.setPlaceholderText("Send a message")
         self.msg_input.returnPressed.connect(self.send_message)
         
         input_layout.addWidget(self.msg_input)
@@ -424,22 +456,52 @@ class MainWindow(QMainWindow):
         right_panel.addLayout(input_layout)
         
         right_widget = QWidget()
-        right_widget.setStyleSheet("background-color: #313338;")
         right_widget.setLayout(right_panel)
         
         splitter = QSplitter(Qt.Orientation.Horizontal)
         splitter.addWidget(self.conv_list)
         splitter.addWidget(right_widget)
-        splitter.setSizes([300, 600])
+        splitter.setSizes([320, 680])
         splitter.setHandleWidth(1)
         
         layout.addWidget(splitter)
-        tab.setLayout(layout)
-        self.tabs.addTab(tab, "Chats")
+        central.setLayout(layout)
+        self.setCentralWidget(central)
         
         self.current_conv_id = None
         self.conv_map = {}
         
+    def post_init(self):
+        self.setup_tray()
+        
+        self.notifier_thread = NotifierThread()
+        self.notifier_thread.new_message_signal.connect(self.on_new_message)
+        self.notifier_thread.start()
+        
+        self.check_login()
+        
+    def check_login(self):
+        valid = False
+        if self.cookie:
+            api.update_cookie(self.cookie)
+            valid = api.get_current_user() is not None
+            
+        if not valid:
+            dialog = SettingsDialog(self)
+            if dialog.exec() == QDialog.DialogCode.Accepted:
+                new_cookie = dialog.get_cookie()
+                api.update_cookie(new_cookie)
+                with open(".env", "w") as f:
+                    f.write(f"ROBLOSECURITY={new_cookie}\n")
+                self.cookie = new_cookie
+                if not api.get_current_user():
+                    QMessageBox.warning(self, "Error", "Invalid cookie. Restart app to try again.")
+                    return
+            else:
+                return # Can't use app
+                
+        self.refresh_chats()
+            
     def refresh_chats(self):
         self.conv_list.clear()
         convs = api.fetch_conversations()
@@ -453,7 +515,6 @@ class MainWindow(QMainWindow):
             avatar_path = None
             
             if not title:
-                # generate title
                 participants = conv.get("participant_user_ids", [])
                 if not participants and "participants" in conv:
                     participants = [p.get("targetId") for p in conv["participants"]]
@@ -466,7 +527,6 @@ class MainWindow(QMainWindow):
                             avatar_path = download_avatar_sync(p_id)
                 title = ", ".join(names) if names else cid
             else:
-                # Group chat, try to find an avatar of a participant
                 for u in user_data.values():
                     uid = u.get("id")
                     if str(uid) != str(api.my_user_id):
@@ -487,32 +547,60 @@ class MainWindow(QMainWindow):
         cid = item.data(Qt.ItemDataRole.UserRole)
         if cid:
             self.current_conv_id = cid
-            self.load_messages(cid)
-                
-    def load_messages(self, cid):
+            self.msg_list.clear()
+            loading_item = QListWidgetItem()
+            lbl = QLabel("Loading messages...")
+            lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            lbl.setStyleSheet("color: #949ba4; padding: 20px;")
+            loading_item.setSizeHint(lbl.sizeHint())
+            self.msg_list.addItem(loading_item)
+            self.msg_list.setItemWidget(loading_item, lbl)
+            
+            self.loader_thread = ChatLoaderThread(cid, self.conv_map)
+            self.loader_thread.finished_signal.connect(self.on_messages_loaded)
+            self.loader_thread.start()
+            
+    def on_messages_loaded(self, msgs, user_data):
         self.msg_list.clear()
-        msgs = api.fetch_messages(cid)
-        user_data = self.conv_map.get(cid, {}).get("user_data", {})
+        
+        last_time = None
+        last_sender = None
         
         for m in reversed(msgs):
             sender_id = str(m.get("sender_user_id", m.get("senderTargetId", m.get("senderUserId"))))
             content = m.get("content", "")
+            created_at_str = m.get("created_at")
+            
+            if created_at_str:
+                dt = dateutil.parser.isoparse(created_at_str)
+                if last_time is None or (dt - last_time).total_seconds() > 3600:
+                    ts_item = QListWidgetItem()
+                    lbl = QLabel(dt.strftime("%B %d, %Y %I:%M %p"))
+                    lbl.setObjectName("timestamp_label")
+                    lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+                    ts_item.setSizeHint(lbl.sizeHint())
+                    self.msg_list.addItem(ts_item)
+                    self.msg_list.setItemWidget(ts_item, lbl)
+                    last_sender = None # force avatar reload after timestamp
+                last_time = dt
             
             is_self = (sender_id == str(api.my_user_id))
             
-            if not is_self:
-                sender_display = extract_name(sender_id, user_data)
+            avatar_path = None
+            if not is_self and sender_id != last_sender:
                 avatar_path = download_avatar_sync(sender_id)
-            else:
-                sender_display = None
-                avatar_path = None
                 
             item = QListWidgetItem()
-            widget = MessageWidget(content, is_self, sender_display, avatar_path)
+            widget = MessageWidget(content, is_self, avatar_path)
+            # Ensure custom properties take effect
+            widget.style().unpolish(widget)
+            widget.style().polish(widget)
+            
             item.setSizeHint(widget.sizeHint())
             
             self.msg_list.addItem(item)
             self.msg_list.setItemWidget(item, widget)
+            last_sender = sender_id
             
         self.msg_list.scrollToBottom()
             
@@ -521,9 +609,20 @@ class MainWindow(QMainWindow):
         text = self.msg_input.text().strip()
         if not text: return
         
-        if api.send_message(self.current_conv_id, text):
-            self.msg_input.clear()
-            self.load_messages(self.current_conv_id)
+        self.msg_input.clear()
+        self.msg_input.setEnabled(False)
+        
+        self.sender_thread = MessageSenderThread(self.current_conv_id, text)
+        self.sender_thread.finished_signal.connect(self.on_message_sent)
+        self.sender_thread.start()
+        
+    def on_message_sent(self, success):
+        self.msg_input.setEnabled(True)
+        self.msg_input.setFocus()
+        if success:
+            self.loader_thread = ChatLoaderThread(self.current_conv_id, self.conv_map)
+            self.loader_thread.finished_signal.connect(self.on_messages_loaded)
+            self.loader_thread.start()
         else:
             QMessageBox.warning(self, "Error", "Failed to send message.")
             
@@ -534,15 +633,23 @@ class MainWindow(QMainWindow):
             if not is_self:
                 avatar_path = os.path.join(ASSETS_DIR, f"roblox_avatar_{data.get('sender_id')}.png")
                 
+            created_at_str = data.get("created_at")
+            if created_at_str:
+                dt = dateutil.parser.isoparse(created_at_str)
+                # For simplicity, we just add the timestamp directly if we want,
+                # but an automatic reload of the chat maintains strict order.
+            
+            # Fast append
             item = QListWidgetItem()
-            widget = MessageWidget(data["content"], is_self, data.get("sender_display"), avatar_path)
+            widget = MessageWidget(data["content"], is_self, avatar_path)
+            widget.style().unpolish(widget)
+            widget.style().polish(widget)
             item.setSizeHint(widget.sizeHint())
             
             self.msg_list.addItem(item)
             self.msg_list.setItemWidget(item, widget)
             self.msg_list.scrollToBottom()
             
-            # also refresh sidebar preview
             self.refresh_chats()
             
     def setup_tray(self):
