@@ -257,7 +257,18 @@ class ConversationWidget(QWidget):
         
         self.setLayout(inner_layout)
 
+class QuoteFrame(QFrame):
+    clicked = pyqtSignal(str)
+    def __init__(self, msg_id, parent=None):
+        super().__init__(parent)
+        self.msg_id = msg_id
+    def mousePressEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton and self.msg_id:
+            self.clicked.emit(self.msg_id)
+        super().mousePressEvent(event)
+
 class MessageWidget(QWidget):
+    reply_clicked = pyqtSignal(str)
     def __init__(self, content, is_self, avatar_path=None, reply_data=None):
         super().__init__()
         
@@ -274,7 +285,9 @@ class MessageWidget(QWidget):
             replier_lbl.setAlignment(Qt.AlignmentFlag.AlignRight if is_self else Qt.AlignmentFlag.AlignLeft)
             message_column.addWidget(replier_lbl)
             
-            quote_frame = QFrame()
+            quote_frame = QuoteFrame(reply_data.get("id"))
+            quote_frame.setCursor(Qt.CursorShape.PointingHandCursor)
+            quote_frame.clicked.connect(self.reply_clicked.emit)
             quote_frame.setStyleSheet("""
                 QFrame {
                     background-color: #2b2b2b;
@@ -364,6 +377,11 @@ class MessageWidget(QWidget):
                 avatar_lbl.setPixmap(pixmap)
                 avatar_lbl.setFixedSize(32, 32)
                 layout.addWidget(avatar_lbl, alignment=Qt.AlignmentFlag.AlignTop)
+            else:
+                spacer = QWidget()
+                spacer.setFixedSize(32, 32)
+                layout.addWidget(spacer)
+            layout.addLayout(message_column)
             layout.addStretch()
             
         self.setLayout(layout)
@@ -868,6 +886,18 @@ class MainWindow(QMainWindow):
         day = str(dt.day)
         return f"{dt.strftime('%b')} {day} {dt.year} | {time_str}"
             
+    def scroll_to_message(self, msg_id):
+        for i in range(self.msg_list.count()):
+            item = self.msg_list.item(i)
+            if item.data(Qt.ItemDataRole.UserRole) == msg_id:
+                self.msg_list.scrollToItem(item, QListWidget.ScrollHint.PositionAtCenter)
+                widget = self.msg_list.itemWidget(item)
+                if widget:
+                    orig_style = widget.styleSheet()
+                    widget.setStyleSheet("background-color: rgba(255, 255, 255, 0.1); border-radius: 8px;")
+                    QTimer.singleShot(1000, lambda w=widget, s=orig_style: w.setStyleSheet(s))
+                break
+                
     def force_open_chat(self, conv_id):
         self.show()
         self.activateWindow()
@@ -913,7 +943,8 @@ class MainWindow(QMainWindow):
                     rep_sender_name = extract_name(rep_sender_id, user_data) if rep_sender_id else "Unknown"
                 reply_data = {
                     "sender": rep_sender_name,
-                    "content": replies_to.get("content", "")
+                    "content": replies_to.get("content", ""),
+                    "id": replies_to.get("id")
                 }
             
             if created_at_str:
