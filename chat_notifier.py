@@ -9,6 +9,7 @@ import webbrowser
 from pathlib import Path
 from dotenv import load_dotenv
 from desktop_notifier import DesktopNotifier, Icon, Button, Attachment
+from desktop_notifier.common import Capability
 
 load_dotenv()
 
@@ -127,10 +128,18 @@ async def main():
         app_icon_obj = Icon(path=Path(logo_path)) if logo_path else None
         
     notifier = DesktopNotifier(
-        app_name="Roblox Chat",
+        app_name="RobloxChats",
         app_icon=app_icon_obj
     )
     
+    if sys.platform.startswith("linux"):
+        # Monkey-patch to remove ON_CLICKED capability so it doesn't render an empty default button
+        original_get_capabilities = notifier._backend.get_capabilities
+        async def patched_get_capabilities():
+            caps = await original_get_capabilities()
+            return frozenset(c for c in caps if c != Capability.ON_CLICKED)
+        notifier._backend.get_capabilities = patched_get_capabilities
+        
     def on_clicked():
         webbrowser.open("https://www.roblox.com/home")
     
