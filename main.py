@@ -824,8 +824,8 @@ class MainWindow(QMainWindow):
             
     def send_typing_indicator(self):
         if self.current_conv_id:
-            t = QThread.create(lambda: api.update_typing_status(self.current_conv_id, True))
-            t.start()
+            import threading
+            threading.Thread(target=lambda: api.update_typing_status(self.current_conv_id, True), daemon=True).start()
             
     def send_message(self):
         if not self.current_conv_id: return
