@@ -261,17 +261,6 @@ class MessageWidget(QWidget):
     def __init__(self, content, is_self, avatar_path=None, reply_data=None):
         super().__init__()
         
-        self.effect = QGraphicsOpacityEffect(self)
-        self.setGraphicsEffect(self.effect)
-        self.effect.setOpacity(0.0)
-        
-        self.anim = QPropertyAnimation(self.effect, b"opacity")
-        self.anim.setDuration(250)
-        self.anim.setStartValue(0.0)
-        self.anim.setEndValue(1.0)
-        self.anim.setEasingCurve(QEasingCurve.Type.InOutQuad)
-        self.anim.start()
-        
         layout = QHBoxLayout()
         layout.setContentsMargins(4, 4, 4, 4)
         
@@ -789,14 +778,6 @@ class MainWindow(QMainWindow):
             self.current_next_cursor = None
             self.is_loading_history = False
             self.system_msg_lbl.hide()
-            
-            self.msg_list_effect = QGraphicsOpacityEffect(self.msg_list)
-            self.msg_list.setGraphicsEffect(self.msg_list_effect)
-            self.msg_list_anim = QPropertyAnimation(self.msg_list_effect, b"opacity")
-            self.msg_list_anim.setDuration(200)
-            self.msg_list_anim.setStartValue(0.0)
-            self.msg_list_anim.setEndValue(1.0)
-            self.msg_list_anim.start()
 
             
             if cid in self.unread_convs:
