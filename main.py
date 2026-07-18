@@ -352,24 +352,25 @@ class MessageWidget(QWidget):
         bubble_layout = QVBoxLayout()
         bubble_layout.setContentsMargins(14, 10, 14, 10)
         
-        content_lbl = QLabel(content)
-        content_lbl.setWordWrap(True)
+        self.raw_content = content
+        self.content_lbl = QLabel(content)
+        self.content_lbl.setWordWrap(True)
 
         
-        content_lbl.setTextInteractionFlags(
+        self.content_lbl.setTextInteractionFlags(
             Qt.TextInteractionFlag.TextSelectableByMouse |
             Qt.TextInteractionFlag.LinksAccessibleByMouse
         )
-        content_lbl.setCursor(Qt.CursorShape.IBeamCursor)
+        self.content_lbl.setCursor(Qt.CursorShape.IBeamCursor)
         
         if is_self:
             active_text = QApplication.palette().color(QPalette.ColorGroup.Active, QPalette.ColorRole.HighlightedText).name()
-            content_lbl.setStyleSheet(f"color: {active_text}; font-size: 14px; selection-background-color: white; selection-color: black;")
+            self.content_lbl.setStyleSheet(f"color: {active_text}; font-size: 14px; selection-background-color: white; selection-color: black;")
         else:
             active_text = QApplication.palette().color(QPalette.ColorGroup.Active, QPalette.ColorRole.WindowText).name()
-            content_lbl.setStyleSheet(f"color: {active_text}; font-size: 14px; selection-background-color: palette(highlight); selection-color: palette(highlighted-text);")
+            self.content_lbl.setStyleSheet(f"color: {active_text}; font-size: 14px; selection-background-color: palette(highlight); selection-color: palette(highlighted-text);")
             
-        bubble_layout.addWidget(content_lbl)
+        bubble_layout.addWidget(self.content_lbl)
         
         self.bubble_container = BubbleWidget(is_self)
         self.bubble_container.setLayout(bubble_layout)
@@ -406,17 +407,13 @@ class MessageWidget(QWidget):
         
 
     def update_width(self, w):
-        self._viewport_width = w
+        max_w = int(w * 0.75)
+        if hasattr(self, 'raw_content'):
+            metrics = self.content_lbl.fontMetrics()
+            rect = metrics.boundingRect(0, 0, max_w, 10000, Qt.TextFlag.TextWordWrap, self.raw_content)
+            self.content_lbl.setMaximumWidth(rect.width() + 10)
         if hasattr(self, 'bubble_container'):
-            self.bubble_container.setMaximumWidth(int(w * 0.75))
-        self.updateGeometry()
-
-    def sizeHint(self):
-        w = getattr(self, '_viewport_width', 600)
-        h = self.heightForWidth(w) if self.hasHeightForWidth() else super().sizeHint().height()
-        if h < 10:
-            h = super().sizeHint().height()
-        return QSize(w, h)
+            self.bubble_container.setMaximumWidth(max_w)
 
     def showEvent(self, event):
         super().showEvent(event)
@@ -897,7 +894,8 @@ class MainWindow(QMainWindow):
                 widget = self.msg_list.itemWidget(item)
                 if widget and hasattr(widget, 'update_width'):
                     widget.update_width(w)
-                    item.setSizeHint(widget.sizeHint())
+                    h = widget.heightForWidth(w) if widget.hasHeightForWidth() else widget.sizeHint().height()
+                    item.setSizeHint(QSize(w - 10, h))
 
     def on_conv_selected(self, item):
         cid = item.data(Qt.ItemDataRole.UserRole)
