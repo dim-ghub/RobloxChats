@@ -26,17 +26,28 @@ class RobloxAPI:
         return False
 
     def get_current_user(self):
-        res = self.session.get("https://users.roblox.com/v1/users/authenticated", timeout=10)
-        if self.check_csrf(res):
-            res = self.session.get("https://users.roblox.com/v1/users/authenticated", timeout=10)
-        if res.status_code == 200:
-            data = res.json()
-            self.my_user_id = data.get("id")
-            self.my_username = data.get("name")
-            self.my_display_name = data.get("displayName")
-            return self.my_user_id
-        logging.error(f"Failed to authenticate: {res.status_code} {res.text}")
-        return None
+        for attempt in range(3):
+            try:
+                res = self.session.get("https://users.roblox.com/v1/users/authenticated", timeout=10)
+                if self.check_csrf(res):
+                    res = self.session.get("https://users.roblox.com/v1/users/authenticated", timeout=10)
+                if res.status_code == 200:
+                    data = res.json()
+                    self.my_user_id = data.get("id")
+                    self.my_username = data.get("name")
+                    self.my_display_name = data.get("displayName")
+                    return self.my_user_id
+                elif res.status_code == 401:
+                    logging.error(f"Unauthorized: {res.status_code} {res.text}")
+                    return None
+                else:
+                    logging.error(f"Failed to authenticate: {res.status_code} {res.text}")
+                    return None
+            except requests.exceptions.RequestException as e:
+                logging.error(f"Network error in get_current_user (attempt {attempt+1}): {e}")
+                time.sleep(2)
+        
+        raise ConnectionError("Roblox is down or no internet connection.")
 
     def fetch_conversations(self):
         url = "https://apis.roblox.com/platform-chat-api/v1/get-user-conversations?pageNumber=1&pageSize=30"

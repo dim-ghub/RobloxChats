@@ -230,9 +230,13 @@ class MainWindow(QMainWindow):
         
     def check_login(self):
         valid = False
-        if self.cookie:
-            api.update_cookie(self.cookie)
-            valid = api.get_current_user() is not None
+        try:
+            if self.cookie:
+                api.update_cookie(self.cookie)
+                valid = api.get_current_user() is not None
+        except ConnectionError:
+            QMessageBox.critical(self, "Connection Error", "Could not connect to Roblox. Please check your internet connection or try again later.")
+            sys.exit(1)
             
         if not valid:
             dialog = SettingsDialog(self)
