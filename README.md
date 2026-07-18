@@ -48,8 +48,16 @@ Click the profile button at the bottom of the sidebar to open settings, where yo
 
 ## Project Structure
 
-- `main.py` — Application entry point, UI, and all widget logic
-- `roblox_api.py` — Roblox API wrapper (auth, conversations, messages, presence)
-- `assets/` — Cached avatars and app icon
+- `main.py` — Application entry point, single-instance guard, and CLI args
+- `src/main_window.py` — Core UI logic and application state
+- `src/widgets.py` — Reusable Qt UI widgets (messages, bubbles, chat items)
+- `src/threads.py` — Background threads and SignalR WebSocket integration
+- `src/roblox_api.py` — Roblox REST API wrapper (auth, presence, messages)
+- `src/utils.py` — Helper utilities for avatars and caching
+- `assets/` — Cached avatars and application icon
 - `.env` — Stores your `.ROBLOSECURITY` cookie (git-ignored)
 - `config.json` — App settings like minimize-to-tray (git-ignored)
+
+## Contributing
+
+The project is currently considered **feature complete**. However, pull requests are warmly welcome for any new additional features or bug fixes!

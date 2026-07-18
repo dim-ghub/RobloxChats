@@ -10,6 +10,8 @@ from PyQt6.QtCore import (
     Qt, QTimer, QPropertyAnimation, QEasingCurve, pyqtSignal, QSize
 )
 
+import math
+import time
 from utils import get_circular_pixmap
 
 
@@ -323,20 +325,40 @@ class MessageWidget(QWidget):
 
 
 class ConversationWidget(QWidget):
-    def __init__(self, title, preview_text, avatar_path=None, presence_type=0, unread=False):
+    def __init__(self, title, preview_text, avatar_path=None, presence_tuple=(0, ""), unread=False):
         super().__init__()
         
         inner_layout = QHBoxLayout()
         inner_layout.setContentsMargins(12, 12, 12, 12)
-        inner_layout.setSpacing(14)
+        inner_layout.setSpacing(10)
         
+        self.unread_dot = QWidget()
+        self.unread_dot.setFixedSize(8, 8)
+        self.unread_dot.setStyleSheet("background-color: white; border-radius: 4px;")
+        self.unread_dot.setVisible(unread)
+        
+        dot_layout = QVBoxLayout()
+        dot_layout.addWidget(self.unread_dot)
+        dot_layout.setAlignment(Qt.AlignmentFlag.AlignVCenter)
+        
+        p_type = 0
+        last_loc = ""
+        if isinstance(presence_tuple, tuple):
+            p_type, last_loc = presence_tuple
+        elif isinstance(presence_tuple, int):
+            p_type = presence_tuple
+            
         avatar_lbl = QLabel()
-        avatar_lbl.setPixmap(get_circular_pixmap(avatar_path, 40, presence_type, unread))
+        avatar_lbl.setPixmap(get_circular_pixmap(avatar_path, 40, p_type, False))
         avatar_lbl.setFixedSize(40, 40)
         
-        if presence_type is not None:
-            presence_texts = {0: "Offline", 1: "Website", 2: "In Game", 3: "Studio"}
-            avatar_lbl.setToolTip(presence_texts.get(presence_type, "Unknown"))
+        presence_texts = {0: "Offline", 1: "Website", 2: "In Game", 3: "Studio"}
+        tooltip_text = presence_texts.get(p_type, "Unknown")
+        if p_type == 2 and last_loc:
+            tooltip_text = f"Playing {last_loc}"
+        elif p_type == 3 and last_loc:
+            tooltip_text = f"Developing {last_loc}"
+        avatar_lbl.setToolTip(tooltip_text)
         
         text_layout = QVBoxLayout()
         text_layout.setSpacing(2)
@@ -363,6 +385,7 @@ class ConversationWidget(QWidget):
         inner_layout.addWidget(avatar_lbl)
         inner_layout.addLayout(text_layout)
         inner_layout.addStretch()
+        inner_layout.addLayout(dot_layout)
         
         self.setLayout(inner_layout)
 
@@ -390,3 +413,72 @@ class ChatListDelegate(QStyledItemDelegate):
         painter.drawLine(rect.left() + 16, rect.bottom(), rect.right() - 16, rect.bottom())
         
         painter.restore()
+
+class TypingDotsWidget(QWidget):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setFixedSize(40, 20)
+        self.start_time = time.time()
+        self.timer = QTimer(self)
+        self.timer.timeout.connect(self.update)
+        self.timer.start(16)
+
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        
+        color = QApplication.palette().color(QPalette.ColorGroup.Active, QPalette.ColorRole.WindowText)
+        color.setAlpha(150)
+        painter.setBrush(color)
+        painter.setPen(Qt.PenStyle.NoPen)
+        
+        radius = 3.5
+        spacing = 10
+        start_x = (self.width() - (spacing * 2)) / 2
+        
+        t = (time.time() - self.start_time) * 5.0
+        
+        for i in range(3):
+            y_offset = math.sin(t - (i * 1.5))
+            y_offset = max(0, y_offset) * 5.0
+            
+            y = (self.height() / 2) - y_offset + 1
+            painter.drawEllipse(int(start_x + i * spacing - radius), int(y - radius), int(radius * 2), int(radius * 2))
+
+class TypingMessageWidget(QWidget):
+    def __init__(self, avatar_path=None, parent=None):
+        super().__init__(parent)
+        self.main_layout = QHBoxLayout()
+        self.main_layout.setContentsMargins(4, 6, 4, 6)
+        
+        self.avatar_lbl = QLabel()
+        if avatar_path:
+            self._avatar_pixmap = get_circular_pixmap(avatar_path, 32)
+            self.avatar_lbl.setPixmap(self._avatar_pixmap)
+        self.avatar_lbl.setFixedSize(32, 32)
+        
+        self.main_layout.addWidget(self.avatar_lbl, alignment=Qt.AlignmentFlag.AlignTop)
+        
+        self.dots = TypingDotsWidget()
+        
+        bubble_layout = QVBoxLayout()
+        bubble_layout.setContentsMargins(14, 10, 14, 10)
+        bubble_layout.addWidget(self.dots)
+        
+        self.bubble_container = BubbleWidget(is_self=False)
+        self.bubble_container.setLayout(bubble_layout)
+        
+        self.main_layout.addWidget(self.bubble_container)
+        self.main_layout.addStretch()
+        
+        self.setLayout(self.main_layout)
+        
+        self.fade_eff = QGraphicsOpacityEffect(self)
+        self.setGraphicsEffect(self.fade_eff)
+        
+        self.fade_anim = QPropertyAnimation(self.fade_eff, b"opacity")
+        self.fade_anim.setDuration(400)
+        self.fade_anim.setStartValue(0.0)
+        self.fade_anim.setEndValue(1.0)
+        self.fade_anim.setEasingCurve(QEasingCurve.Type.OutQuad)
+        self.fade_anim.start()

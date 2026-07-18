@@ -19,9 +19,9 @@ from constants import ASSETS_DIR
 from utils import load_config, save_config, get_circular_pixmap, download_avatar_sync, extract_name
 from widgets import (
     BubbleWidget, InputContainerWidget, SendButton,
-    ConversationWidget, QuoteFrame, MessageWidget, ChatListDelegate
+    ConversationWidget, QuoteFrame, MessageWidget, ChatListDelegate, TypingMessageWidget
 )
-from threads import ChatLoaderThread, MessageSenderThread, PresencePollingThread, NotifierThread
+from threads import ChatLoaderThread, MessageSenderThread, RealtimeChatThread
 from dialogs import SettingsDialog
 
 
@@ -51,8 +51,8 @@ class MainWindow(QMainWindow):
     def changeEvent(self, event):
         if event.type() in (QEvent.Type.ActivationChange, QEvent.Type.WindowStateChange):
             self.app_active = self.isActiveWindow() and self.isVisible() and not self.isMinimized()
-            if self.app_active and hasattr(self, 'notifier_thread'):
-                self.notifier_thread.clear_requested = True
+            if self.app_active and hasattr(self, 'realtime_thread'):
+                self.realtime_thread.clear_requested = True
         super().changeEvent(event)
         
     def hideEvent(self, event):
@@ -61,8 +61,8 @@ class MainWindow(QMainWindow):
         
     def showEvent(self, event):
         self.app_active = self.isActiveWindow() and not self.isMinimized()
-        if self.app_active and hasattr(self, 'notifier_thread'):
-            self.notifier_thread.clear_requested = True
+        if self.app_active and hasattr(self, 'realtime_thread'):
+            self.realtime_thread.clear_requested = True
         super().showEvent(event)
         
     def setup_ui(self):
@@ -176,6 +176,17 @@ class MainWindow(QMainWindow):
         self.system_msg_lbl.setWordWrap(True)
         self.system_msg_lbl.hide()
         
+        self.recv_typing_timer = QTimer(self)
+        self.recv_typing_timer.setSingleShot(True)
+        self.recv_typing_timer.timeout.connect(self.hide_typing_indicator)
+        
+        self.send_typing_timer = QTimer(self)
+        self.send_typing_timer.setSingleShot(True)
+        
+        self.idle_typing_timer = QTimer(self)
+        self.idle_typing_timer.setSingleShot(True)
+        self.idle_typing_timer.timeout.connect(self.on_typing_idle)
+        
         bottom_panel = QVBoxLayout()
         bottom_panel.setContentsMargins(16, 8, 16, 16)
         bottom_panel.addWidget(self.system_msg_lbl)
@@ -198,6 +209,7 @@ class MainWindow(QMainWindow):
         self.setCentralWidget(central)
         
         self.current_conv_id = None
+        self.typing_item = None
         self.current_next_cursor = None
         self.is_loading_history = False
         self.conv_map = {}
@@ -207,15 +219,13 @@ class MainWindow(QMainWindow):
     def post_init(self):
         self.setup_tray()
         
-        self.notifier_thread = NotifierThread(self)
-        self.notifier_thread.new_message_signal.connect(self.on_new_message)
-        self.notifier_thread.open_chat_signal.connect(self.force_open_chat)
-        self.notifier_thread.start()
-        
-        self.presence_thread = PresencePollingThread()
-        self.presence_thread.presence_signal.connect(self.on_presence_updated)
-        self.presence_thread.start()
-        
+        self.realtime_thread = RealtimeChatThread(api, self)
+        self.realtime_thread.typing_received_signal.connect(self.on_typing_received)
+        self.realtime_thread.new_message_signal.connect(self.on_new_message)
+        self.realtime_thread.open_chat_signal.connect(self.force_open_chat)
+        self.realtime_thread.presence_signal.connect(self.on_presence_updated)
+        self.realtime_thread.read_receipt_signal.connect(self.on_read_receipt)
+        self.realtime_thread.start()
         self.check_login()
         
     def check_login(self):
@@ -342,37 +352,119 @@ class MainWindow(QMainWindow):
                         names.append(extract_name(p_id, user_data))
                         if not avatar_path:
                             avatar_path = download_avatar_sync(p_id)
-                            presence_type = self.presence_map.get(str(p_id), 0)
+                            presence_tuple = self.presence_map.get(str(p_id), (0, ""))
                 title = ", ".join(names) if names else cid
             else:
                 for u in user_data.values():
                     uid = u.get("id")
                     if str(uid) != str(api.my_user_id):
                         avatar_path = download_avatar_sync(uid)
-                        presence_type = self.presence_map.get(str(uid), 0)
+                        presence_tuple = self.presence_map.get(str(uid), (0, ""))
                         break
 
             preview = conv.get("preview_message", {}).get("content", "No messages yet")
             unread = cid in self.unread_convs
             
             item = QListWidgetItem()
-            widget = ConversationWidget(title, preview, avatar_path, presence_type, unread)
+            widget = ConversationWidget(title, preview, avatar_path, presence_tuple, unread)
             item.setSizeHint(widget.sizeHint())
             item.setData(Qt.ItemDataRole.UserRole, cid)
             
             self.conv_list.addItem(item)
             self.conv_list.setItemWidget(item, widget)
             
-        self.presence_thread.set_user_ids(tracked_users)
+        missing_pres = [str(uid) for uid in tracked_users if str(uid) not in self.presence_map]
+        if missing_pres:
+            for uid in missing_pres:
+                self.presence_map[uid] = (0, "")
+            
+            def fetch_pres():
+                try:
+                    presences = api.get_presence(missing_pres)
+                    if presences:
+                        pres_dict = {str(p["userId"]): (p["userPresenceType"], p.get("lastLocation", "")) for p in presences}
+                        self.realtime_thread.presence_signal.emit(pres_dict)
+                except: pass
+            
+            import threading
+            threading.Thread(target=fetch_pres, daemon=True).start()
+            
+    def on_typing_received(self, conv_id, user_id, is_typing):
+        if conv_id == self.current_conv_id:
+            if is_typing:
+                if not self.typing_item:
+                    avatar_path = None
+                    user_data = self.conv_map.get(conv_id, {}).get("user_data", {})
+                    if str(user_id) in user_data:
+                        avatar_path = download_avatar_sync(user_id)
+                        
+                    widget = TypingMessageWidget(avatar_path)
+                    item = QListWidgetItem()
+                    item.setSizeHint(widget.sizeHint())
+                    
+                    self.msg_list.addItem(item)
+                    self.msg_list.setItemWidget(item, widget)
+                    self.msg_list.scrollToBottom()
+                else:
+                    widget = self.msg_list.itemWidget(self.typing_item)
+                    if widget and getattr(widget, 'is_fading_out', False):
+                        widget.is_fading_out = False
+                        if hasattr(widget, 'fade_out_anim'):
+                            widget.fade_out_anim.stop()
+                        if hasattr(widget, 'fade_anim'):
+                            widget.fade_anim.setStartValue(widget.fade_eff.opacity())
+                            widget.fade_anim.setEndValue(1.0)
+                            widget.fade_anim.start()
+                            
+                self.recv_typing_timer.start(5000)
+            else:
+                self.hide_typing_indicator()
+                
+    def hide_typing_indicator(self):
+        if self.typing_item:
+            widget = self.msg_list.itemWidget(self.typing_item)
+            if widget and not getattr(widget, 'is_fading_out', False):
+                widget.is_fading_out = True
+                widget.fade_out_anim = QPropertyAnimation(widget.fade_eff, b"opacity")
+                widget.fade_out_anim.setDuration(400)
+                widget.fade_out_anim.setStartValue(widget.fade_eff.opacity())
+                widget.fade_out_anim.setEndValue(0.0)
+                widget.fade_out_anim.setEasingCurve(QEasingCurve.Type.OutQuad)
+                
+                item_to_remove = self.typing_item
+                widget.fade_out_anim.finished.connect(lambda: self._do_remove_typing_item(item_to_remove))
+                widget.fade_out_anim.start()
+                
+    def _do_remove_typing_item(self, item):
+        try:
+            if self.typing_item == item:
+                widget = self.msg_list.itemWidget(item)
+                if widget and getattr(widget, 'is_fading_out', False):
+                    row = self.msg_list.row(item)
+                    if row >= 0:
+                        self.msg_list.takeItem(row)
+                    self.typing_item = None
+        except RuntimeError:
+            pass
             
     def on_presence_updated(self, pres_dict):
         changed = False
-        for uid, p_type in pres_dict.items():
-            if self.presence_map.get(uid) != p_type:
-                self.presence_map[uid] = p_type
+        for uid, p_tuple in pres_dict.items():
+            if self.presence_map.get(uid) != p_tuple:
+                self.presence_map[uid] = p_tuple
                 changed = True
         if changed:
             self.refresh_chats()
+            
+    def on_read_receipt(self, conv_id, is_unread):
+        if is_unread:
+            if conv_id == self.current_conv_id and self.isActiveWindow():
+                return
+            self.unread_convs.add(conv_id)
+        else:
+            if conv_id in self.unread_convs:
+                self.unread_convs.remove(conv_id)
+        self.refresh_chats()
             
     def on_scroll_changed(self, value):
         if value == 0 and self.current_next_cursor and not self.is_loading_history:
@@ -400,6 +492,7 @@ class MainWindow(QMainWindow):
             self.current_conv_id = cid
             self.current_next_cursor = None
             self.is_loading_history = False
+            self.typing_item = None
             self.system_msg_lbl.hide()
             
             if cid in self.unread_convs:
@@ -620,15 +713,23 @@ class MainWindow(QMainWindow):
 
     def on_input_changed(self, text):
         if text and self.current_conv_id:
-            if not self.typing_timer.isActive():
-                self.send_typing_indicator()
-                self.typing_timer.start()
-        else:
-            self.typing_timer.stop()
+            if not self.send_typing_timer.isActive():
+                self.send_typing_indicator(True)
+                self.send_typing_timer.start(3000)
             
-    def send_typing_indicator(self):
+            self.idle_typing_timer.start(2500)
+        else:
+            self.send_typing_timer.stop()
+            self.idle_typing_timer.stop()
+            self.send_typing_indicator(False)
+            
+    def on_typing_idle(self):
+        self.send_typing_timer.stop()
+        self.send_typing_indicator(False)
+            
+    def send_typing_indicator(self, is_typing=True):
         if self.current_conv_id:
-            threading.Thread(target=lambda: api.update_typing_status(self.current_conv_id, True), daemon=True).start()
+            threading.Thread(target=lambda: api.update_typing_status(self.current_conv_id, is_typing), daemon=True).start()
             
     def send_message(self):
         if not self.current_conv_id: return
@@ -652,22 +753,30 @@ class MainWindow(QMainWindow):
     def on_new_message(self, data):
         cid = data["conv_id"]
         if self.current_conv_id == cid:
-            is_self = data.get("sender_id") == str(api.my_user_id)
-            if is_self:
-                return 
-                
-            avatar_path = os.path.join(ASSETS_DIR, f"roblox_avatar_{data.get('sender_id')}.png")
-            item = QListWidgetItem()
-            msg_id = data.get("id")
-            if msg_id:
-                item.setData(Qt.ItemDataRole.UserRole, msg_id)
-                
-            dt_val = None
-            if data.get("created_at"):
-                try: dt_val = datetime.fromisoformat(data.get("created_at").replace("Z", "+00:00")).astimezone()
+            self.hide_typing_indicator()
+            avatar_path = None
+            avatar_url = data.get("avatar_url")
+            if avatar_url:
+                try:
+                    import requests
+                    res = requests.get(avatar_url, timeout=5)
+                    if res.status_code == 200:
+                        avatar_path = os.path.join(ASSETS_DIR, f"tmp_{cid}.png")
+                        with open(avatar_path, "wb") as f:
+                            f.write(res.content)
                 except: pass
                 
-            widget = MessageWidget(data["content"], is_self, avatar_path, None, animate=True, sender_id=str(data.get("sender_id")), timestamp=dt_val)
+            sender_id = None
+            sender_display = data.get("sender_display", "")
+            user_data = self.conv_map.get(cid, {}).get("user_data", {})
+            for uid_str, u in user_data.items():
+                if u.get("displayName", "") in sender_display or u.get("name", "") in sender_display:
+                    sender_id = uid_str
+                    break
+                    
+            now = datetime.now().astimezone()
+            item = QListWidgetItem()
+            widget = MessageWidget(data["content"], False, avatar_path, None, animate=True, sender_id=sender_id, timestamp=now)
             widget.reply_clicked.connect(self.go_to_message)
             item.setSizeHint(widget.sizeHint())
             

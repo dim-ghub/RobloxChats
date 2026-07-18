@@ -56,13 +56,6 @@ def get_circular_pixmap(image_path, size=48, presence_type=None, unread=False):
         painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceOver)
         painter.setBrush(color)
         painter.drawEllipse(size - r*2 - 2, size - r*2 - 2, r*2, r*2)
-        
-    if unread:
-        r = size // 5
-        painter.setBrush(QColor("#FF0000"))
-        painter.setPen(Qt.PenStyle.NoPen)
-        painter.drawEllipse(0, 0, r*2, r*2)
-        
     painter.end()
     return target
 
