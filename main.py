@@ -341,7 +341,10 @@ class MessageWidget(QWidget):
         self.pop_anim.setStartValue(0.0)
         self.pop_anim.setEndValue(1.0)
         self.pop_anim.setEasingCurve(QEasingCurve.Type.OutBack)
-        QTimer.singleShot(10, self.pop_anim.start)
+        
+    def showEvent(self, event):
+        super().showEvent(event)
+        self.pop_anim.start()
         
         layout = QHBoxLayout()
         layout.setContentsMargins(4, 4, 4, 4)
@@ -922,6 +925,7 @@ class MainWindow(QMainWindow):
     def on_conv_selected(self, item):
         cid = item.data(Qt.ItemDataRole.UserRole)
         if cid:
+            self.msg_list_fade_anim.start()
             self.current_conv_id = cid
             self.current_next_cursor = None
             self.is_loading_history = False
