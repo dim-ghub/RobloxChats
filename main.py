@@ -836,6 +836,17 @@ class MainWindow(QMainWindow):
         day = str(dt.day)
         return f"{dt.strftime('%b')} {day} {dt.year} | {time_str}"
             
+    def force_open_chat(self, conv_id):
+        self.show()
+        self.activateWindow()
+        self.raise_()
+        for i in range(self.conv_list.count()):
+            item = self.conv_list.item(i)
+            if item.data(Qt.ItemDataRole.UserRole) == conv_id:
+                self.conv_list.setCurrentItem(item)
+                self.on_conv_selected(item)
+                break
+                
     def on_messages_loaded(self, msgs, user_data, next_cursor, is_prepend):
         self.current_next_cursor = next_cursor if next_cursor else None
         
