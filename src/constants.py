@@ -1,6 +1,6 @@
 import os
 
-SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+SCRIPT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 ASSETS_DIR = os.path.join(SCRIPT_DIR, "assets")
 CONFIG_PATH = os.path.join(SCRIPT_DIR, "config.json")
 os.makedirs(ASSETS_DIR, exist_ok=True)

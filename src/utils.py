@@ -108,7 +108,7 @@ def download_avatar_sync(user_id):
 
 
 def install_desktop_shortcut():
-    app_path = os.path.abspath(__file__)
+    app_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "main.py"))
     os.chmod(app_path, os.stat(app_path).st_mode | stat.S_IEXEC)
     
     icon_path = os.path.join(ASSETS_DIR, "roblox_logo.png")
