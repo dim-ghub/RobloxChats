@@ -354,9 +354,7 @@ class MessageWidget(QWidget):
         
         content_lbl = QLabel(content)
         content_lbl.setWordWrap(True)
-        metrics = content_lbl.fontMetrics()
-        rect = metrics.boundingRect(0, 0, 600, 10000, Qt.TextFlag.TextWordWrap, content)
-        content_lbl.setMaximumWidth(rect.width() + 10)
+
         
         content_lbl.setTextInteractionFlags(
             Qt.TextInteractionFlag.TextSelectableByMouse |
@@ -406,6 +404,11 @@ class MessageWidget(QWidget):
             
         self.setLayout(self.main_layout)
         
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        if hasattr(self, 'bubble_container'):
+            self.bubble_container.setMaximumWidth(int(self.width() * 0.75))
 
     def showEvent(self, event):
         super().showEvent(event)
@@ -755,7 +758,7 @@ class MainWindow(QMainWindow):
         splitter = QSplitter(Qt.Orientation.Horizontal)
         splitter.addWidget(sidebar_container)
         splitter.addWidget(right_widget)
-        splitter.setSizes([320, 680])
+        splitter.setSizes([260, 740])
         splitter.setHandleWidth(1)
         
         layout.addWidget(splitter)
