@@ -129,6 +129,7 @@ class BubbleWidget(QFrame):
     def __init__(self, is_self, parent=None):
         super().__init__(parent)
         self.setObjectName("bubbleWidget")
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         self.is_self = is_self
         self.is_highlighted = False
         self.update_style()
@@ -160,6 +161,7 @@ class InputContainerWidget(QFrame):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setObjectName("inputContainer")
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         pal = QApplication.palette()
         bg_color = pal.color(QPalette.ColorRole.Base)
         if bg_color.lightness() < 128:
@@ -290,12 +292,15 @@ class MessageWidget(QWidget):
         self.should_animate = animate
         
         if self.should_animate:
-            self.pop_anim = QVariantAnimation(self)
-            self.pop_anim.setDuration(300)
-            self.pop_anim.setStartValue(0.0)
-            self.pop_anim.setEndValue(1.0)
-            self.pop_anim.setEasingCurve(QEasingCurve.Type.OutBack)
-            self.pop_anim.valueChanged.connect(self._update_margins)
+            self.fade_eff = QGraphicsOpacityEffect(self)
+            self.setGraphicsEffect(self.fade_eff)
+            
+            self.fade_anim = QPropertyAnimation(self.fade_eff, b"opacity")
+            self.fade_anim.setDuration(400)
+            self.fade_anim.setStartValue(0.0)
+            self.fade_anim.setEndValue(1.0)
+            self.fade_anim.setEasingCurve(QEasingCurve.Type.OutQuad)
+            self.fade_anim.finished.connect(lambda: self.setGraphicsEffect(None))
         
         message_column = QVBoxLayout()
         message_column.setSpacing(4)
@@ -409,21 +414,11 @@ class MessageWidget(QWidget):
             
         self.setLayout(self.main_layout)
         
-    def _update_margins(self, val):
-        scale = val
-        if scale < 0: scale = 0
-        
-        max_margin = 30
-        margin = int(max_margin * (1.0 - scale))
-        
-        # Animate left/right padding to simulate a horizontal grow without squishing text too much
-        if self.layout().count() > 0:
-            self.main_layout.setContentsMargins(4 + margin, 4, 4 + margin, 4)
 
     def showEvent(self, event):
         super().showEvent(event)
         if self.should_animate:
-            self.pop_anim.start()
+            self.fade_anim.start()
         
     def trigger_highlight(self):
         if hasattr(self, 'bubble_container'):
@@ -759,24 +754,7 @@ class MainWindow(QMainWindow):
         bottom_panel.addWidget(self.system_msg_lbl)
         bottom_panel.addWidget(input_container)
         
-        self.msg_stack = QWidget()
-        stack_layout = QStackedLayout(self.msg_stack)
-        stack_layout.setStackingMode(QStackedLayout.StackingMode.StackAll)
-        
-        self.fade_overlay = QFrame()
-        self.fade_overlay.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
-        self.fade_overlay.setStyleSheet("background-color: transparent;")
-        
-        self.fade_anim = QVariantAnimation(self)
-        self.fade_anim.setDuration(150)
-        self.fade_anim.setStartValue(255)
-        self.fade_anim.setEndValue(0)
-        self.fade_anim.valueChanged.connect(self._update_fade_overlay)
-        
-        stack_layout.addWidget(self.fade_overlay)
-        stack_layout.addWidget(self.msg_list)
-        
-        right_panel.addWidget(self.msg_stack)
+        right_panel.addWidget(self.msg_list)
         right_panel.addLayout(bottom_panel)
         
         right_widget = QWidget()
@@ -905,17 +883,10 @@ class MainWindow(QMainWindow):
             self.loader_thread.finished_signal.connect(self.on_messages_loaded)
             self.loader_thread.start()
 
-    def _update_fade_overlay(self, alpha):
-        pal = self.palette()
-        bg = pal.color(QPalette.ColorRole.Window)
-        self.fade_overlay.setStyleSheet(f"background-color: rgba({bg.red()}, {bg.green()}, {bg.blue()}, {alpha});")
 
     def on_conv_selected(self, item):
         cid = item.data(Qt.ItemDataRole.UserRole)
         if cid:
-            pal = self.palette()
-            bg = pal.color(QPalette.ColorRole.Window)
-            self.fade_overlay.setStyleSheet(f"background-color: {bg.name()};")
             self.current_conv_id = cid
             self.current_next_cursor = None
             self.is_loading_history = False
@@ -1055,7 +1026,7 @@ class MainWindow(QMainWindow):
             msg_id = m.get("id")
             if msg_id:
                 item.setData(Qt.ItemDataRole.UserRole, msg_id)
-            widget = MessageWidget(content, is_self, avatar_path, reply_data, animate=False)
+            widget = MessageWidget(content, is_self, avatar_path, reply_data, animate=True)
             widget.reply_clicked.connect(self.go_to_message)
             
             widget.style().unpolish(widget)
@@ -1080,7 +1051,6 @@ class MainWindow(QMainWindow):
             self.msg_list.verticalScrollBar().setValue(old_scroll_val + delta)
         if not is_prepend:
             self.msg_list.scrollToBottom()
-            self.fade_anim.start()
             
         self.is_loading_history = False
         
