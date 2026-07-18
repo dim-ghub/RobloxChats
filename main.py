@@ -31,12 +31,18 @@ QSS_CUSTOM_WIDGETS = """
 /* Remove backgrounds from lists so they inherit the OS theme */
 QListWidget {
     background: transparent;
+    border: none;
+    outline: none;
+}
 QListWidget#msg_list {
     background: transparent;
     border: none;
     outline: none;
 }
-QListWidget#msg_list::item:selected, QListWidget#msg_list::item:hover {
+QListWidget#msg_list::item:selected {
+    background: transparent;
+}
+QListWidget#msg_list::item:hover {
     background: transparent;
 }
 /* Floating Sidebar Container */
@@ -248,7 +254,12 @@ class MessageWidget(QWidget):
         
         content_lbl = QLabel(content)
         content_lbl.setWordWrap(True)
-        content_lbl.setTextInteractionFlags(Qt.TextInteractionFlag.TextBrowserInteraction)
+        content_lbl.setTextInteractionFlags(
+            Qt.TextInteractionFlag.TextSelectableByMouse |
+            Qt.TextInteractionFlag.LinksAccessibleByMouse
+        )
+        content_lbl.setCursor(Qt.CursorShape.IBeamCursor)
+        
         # Force text color using styling to inherit Active palette correctly so it doesn't change when unfocused
         if is_self:
             active_text = QApplication.palette().color(QPalette.ColorGroup.Active, QPalette.ColorRole.HighlightedText).name()
@@ -261,7 +272,6 @@ class MessageWidget(QWidget):
         
         bubble_container = BubbleWidget(is_self)
         bubble_container.setLayout(bubble_layout)
-        bubble_container.setSizePolicy(QSizePolicy.Policy.Maximum, QSizePolicy.Policy.Preferred)
         
         if is_self:
             layout.addStretch()
@@ -279,9 +289,6 @@ class MessageWidget(QWidget):
             layout.addWidget(bubble_container)
             layout.addStretch()
             
-        # Give the bubble container a larger maximum width so it can expand more before wrapping
-        bubble_container.setMaximumWidth(800)
-        
         self.setLayout(layout)
 
 def extract_name(user_id, user_data_dict):
@@ -494,8 +501,7 @@ class ChatListDelegate(QStyledItemDelegate):
         
         if option.state & QStyle.StateFlag.State_Selected:
             bg_color = QApplication.palette().color(QPalette.ColorGroup.Active, QPalette.ColorRole.Highlight)
-            bg_color.setAlpha(128)
-            painter.setBrush(bg_color)
+            painter.setBrush(QColor(bg_color.red(), bg_color.green(), bg_color.blue(), 80))
             painter.setPen(Qt.PenStyle.NoPen)
             hl_rect = rect.adjusted(4, 4, -4, -4)
             painter.drawRoundedRect(hl_rect, 12, 12)
