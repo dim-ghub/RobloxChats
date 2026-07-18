@@ -8,7 +8,7 @@ import sys
 import webbrowser
 from pathlib import Path
 from dotenv import load_dotenv
-from desktop_notifier import DesktopNotifier, Icon, Button
+from desktop_notifier import DesktopNotifier, Icon, Button, Attachment
 
 load_dotenv()
 
@@ -189,15 +189,19 @@ async def main():
                             
                         # Send desktop notification
                         if sys.platform.startswith("linux"):
-                            icon_obj = Icon(name=avatar_path) if avatar_path else None
+                            # On Linux, icon is the small badge and attachment is the large image
+                            icon_obj = Icon(name=logo_path) if logo_path else None
+                            attachment_obj = Attachment(path=Path(avatar_path)) if avatar_path else None
                         else:
                             icon_obj = Icon(path=Path(avatar_path)) if avatar_path else None
+                            attachment_obj = None
                             
                         try:
                             await notifier.send(
                                 title=title,
                                 message=content,
                                 icon=icon_obj,
+                                attachment=attachment_obj,
                                 on_clicked=on_clicked,
                                 buttons=[
                                     Button(title="Open in browser", on_pressed=on_clicked)
