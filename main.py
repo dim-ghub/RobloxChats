@@ -159,6 +159,29 @@ class PopInEffect(QGraphicsEffect):
         self.drawSource(painter)
         painter.restore()
 
+class FadeEffect(QGraphicsEffect):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._progress = 1.0
+        
+    @pyqtProperty(float)
+    def progress(self):
+        return self._progress
+        
+    @progress.setter
+    def progress(self, val):
+        self._progress = val
+        self.update()
+        
+    def draw(self, painter):
+        if self._progress < 0.01:
+            return
+            
+        painter.save()
+        painter.setOpacity(self._progress)
+        self.drawSource(painter)
+        painter.restore()
+
 class BubbleWidget(QWidget):
     def __init__(self, is_self, parent=None):
         super().__init__(parent)
@@ -1059,16 +1082,6 @@ class MainWindow(QMainWindow):
             self.msg_list.verticalScrollBar().setValue(old_scroll_val + delta)
         else:
             self.msg_list.scrollToBottom()
-            def do_scroll():
-                bar = self.msg_list.verticalScrollBar()
-                if not hasattr(self, 'load_scroll_anim'):
-                    self.load_scroll_anim = QPropertyAnimation(bar, b"value")
-                self.load_scroll_anim.setDuration(250)
-                self.load_scroll_anim.setStartValue(max(0, bar.maximum() - 250))
-                self.load_scroll_anim.setEndValue(bar.maximum())
-                self.load_scroll_anim.setEasingCurve(QEasingCurve.Type.OutQuad)
-                self.load_scroll_anim.start()
-            QTimer.singleShot(20, do_scroll)
             
         self.is_loading_history = False
         
@@ -1098,16 +1111,6 @@ class MainWindow(QMainWindow):
         self.msg_list.addItem(item)
         self.msg_list.setItemWidget(item, widget)
         self.msg_list.scrollToBottom()
-        def pop_scroll():
-            bar = self.msg_list.verticalScrollBar()
-            if not hasattr(self, 'pop_scroll_anim'):
-                self.pop_scroll_anim = QPropertyAnimation(bar, b"value")
-            self.pop_scroll_anim.setDuration(200)
-            self.pop_scroll_anim.setStartValue(max(0, bar.maximum() - 100))
-            self.pop_scroll_anim.setEndValue(bar.maximum())
-            self.pop_scroll_anim.setEasingCurve(QEasingCurve.Type.OutQuad)
-            self.pop_scroll_anim.start()
-        QTimer.singleShot(20, pop_scroll)
         
         self.sender_thread = MessageSenderThread(self.current_conv_id, text)
         self.sender_thread.start()
@@ -1127,16 +1130,6 @@ class MainWindow(QMainWindow):
             self.msg_list.addItem(item)
             self.msg_list.setItemWidget(item, widget)
             self.msg_list.scrollToBottom()
-            def pop_scroll():
-                bar = self.msg_list.verticalScrollBar()
-                if not hasattr(self, 'pop_scroll_anim'):
-                    self.pop_scroll_anim = QPropertyAnimation(bar, b"value")
-                self.pop_scroll_anim.setDuration(200)
-                self.pop_scroll_anim.setStartValue(max(0, bar.maximum() - 100))
-                self.pop_scroll_anim.setEndValue(bar.maximum())
-                self.pop_scroll_anim.setEasingCurve(QEasingCurve.Type.OutQuad)
-                self.pop_scroll_anim.start()
-            QTimer.singleShot(20, pop_scroll)
         else:
             self.unread_convs.add(cid)
             
