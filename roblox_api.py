@@ -9,6 +9,8 @@ class RobloxAPI:
         self.session = requests.Session()
         self.cookie = None
         self.my_user_id = None
+        self.my_username = None
+        self.my_display_name = None
         
     def update_cookie(self, cookie):
         self.cookie = cookie
@@ -25,7 +27,10 @@ class RobloxAPI:
         if self.check_csrf(res):
             res = self.session.get("https://users.roblox.com/v1/users/authenticated", timeout=10)
         if res.status_code == 200:
-            self.my_user_id = res.json().get("id")
+            data = res.json()
+            self.my_user_id = data.get("id")
+            self.my_username = data.get("name")
+            self.my_display_name = data.get("displayName")
             return self.my_user_id
         logging.error(f"Failed to authenticate: {res.status_code} {res.text}")
         return None

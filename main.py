@@ -8,11 +8,14 @@ def install_desktop_shortcut():
     app_path = os.path.abspath(__file__)
     os.chmod(app_path, os.stat(app_path).st_mode | stat.S_IEXEC)
     
+    icon_path = os.path.join(SCRIPT_DIR, "assets", "roblox_logo.png")
+    icon_line = f"Icon={icon_path}" if os.path.exists(icon_path) else "Icon=utilities-terminal"
+    
     desktop_content = f"""[Desktop Entry]
 Type=Application
 Name=RobloxChats
 Exec=/usr/bin/env python3 {app_path}
-Icon=utilities-terminal
+{icon_line}
 Terminal=false
 Categories=Network;Chat;
 """
@@ -25,6 +28,7 @@ Categories=Network;Chat;
     sys.exit(0)
 import argparse
 import asyncio
+import json
 import logging
 import time
 from datetime import datetime
@@ -35,10 +39,11 @@ from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QLineEdit, QPushButton, QListWidget, QLabel, QDialog, QListView,
     QSystemTrayIcon, QMenu, QSplitter, QMessageBox, QListWidgetItem, QSizePolicy, QStyledItemDelegate, QStyle, QFrame,
-    QGraphicsOpacityEffect, QGraphicsEffect, QStackedLayout
+    QGraphicsOpacityEffect, QGraphicsEffect, QStackedLayout, QCheckBox
 )
 from PyQt6.QtGui import QIcon, QAction, QPixmap, QPainter, QPainterPath, QColor, QFont, QPalette, QBrush, QPen, QFontMetrics
 from PyQt6.QtCore import QThread, pyqtSignal, Qt, QTimer, QSize, QEvent, QPropertyAnimation, QEasingCurve, pyqtProperty, QVariantAnimation
+from PyQt6.QtNetwork import QLocalServer, QLocalSocket
 
 from desktop_notifier import DesktopNotifier, Icon, Button, Attachment
 from desktop_notifier.common import Capability
@@ -48,7 +53,23 @@ from roblox_api import api
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 ASSETS_DIR = os.path.join(SCRIPT_DIR, "assets")
+CONFIG_PATH = os.path.join(SCRIPT_DIR, "config.json")
 os.makedirs(ASSETS_DIR, exist_ok=True)
+
+def load_config():
+    defaults = {"minimize_to_tray": True}
+    if os.path.exists(CONFIG_PATH):
+        try:
+            with open(CONFIG_PATH) as f:
+                data = json.load(f)
+            defaults.update(data)
+        except Exception:
+            pass
+    return defaults
+
+def save_config(data):
+    with open(CONFIG_PATH, "w") as f:
+        json.dump(data, f, indent=2)
 
 QSS_CUSTOM_WIDGETS = """
 /* Remove backgrounds from lists so they inherit the OS theme */
@@ -228,7 +249,7 @@ class SettingsDialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle("RobloxChats Settings")
-        self.setFixedSize(400, 200)
+        self.setFixedSize(400, 260)
         
         layout = QVBoxLayout()
         self.cookie_input = QLineEdit()
@@ -238,18 +259,27 @@ class SettingsDialog(QDialog):
         if os.environ.get("ROBLOSECURITY"):
             self.cookie_input.setText(os.environ.get("ROBLOSECURITY"))
         
+        config = load_config()
+        self.tray_checkbox = QCheckBox("Minimize to tray when closed")
+        self.tray_checkbox.setChecked(config.get("minimize_to_tray", True))
+        
         self.login_btn = QPushButton("Save & Login")
         self.login_btn.clicked.connect(self.accept)
         
         layout.addStretch()
         layout.addWidget(QLabel("Roblox Cookie (.ROBLOSECURITY):"))
         layout.addWidget(self.cookie_input)
+        layout.addWidget(self.tray_checkbox)
+        layout.addSpacing(8)
         layout.addWidget(self.login_btn)
         layout.addStretch()
         self.setLayout(layout)
         
     def get_cookie(self):
         return self.cookie_input.text().strip()
+    
+    def get_minimize_to_tray(self):
+        return self.tray_checkbox.isChecked()
 
 class ConversationWidget(QWidget):
     def __init__(self, title, preview_text, avatar_path=None, presence_type=0, unread=False):
@@ -419,20 +449,18 @@ class MessageWidget(QWidget):
             
         message_column.addLayout(bubble_align_layout)
         
+        self.avatar_lbl = None
+        self._avatar_pixmap = None
         if is_self:
             self.main_layout.addStretch()
             self.main_layout.addLayout(message_column)
         else:
+            self.avatar_lbl = QLabel()
             if avatar_path:
-                avatar_lbl = QLabel()
-                pixmap = get_circular_pixmap(avatar_path, 32)
-                avatar_lbl.setPixmap(pixmap)
-                avatar_lbl.setFixedSize(32, 32)
-                self.main_layout.addWidget(avatar_lbl, alignment=Qt.AlignmentFlag.AlignTop)
-            else:
-                spacer = QWidget()
-                spacer.setFixedSize(32, 32)
-                self.main_layout.addWidget(spacer)
+                self._avatar_pixmap = get_circular_pixmap(avatar_path, 32)
+                self.avatar_lbl.setPixmap(self._avatar_pixmap)
+            self.avatar_lbl.setFixedSize(32, 32)
+            self.main_layout.addWidget(self.avatar_lbl, alignment=Qt.AlignmentFlag.AlignTop)
             self.main_layout.addLayout(message_column)
             self.main_layout.addStretch()
             
@@ -446,6 +474,14 @@ class MessageWidget(QWidget):
         top_margin = 1 if pos in ("middle", "bottom") else 6
         bottom_margin = 1 if pos in ("top", "middle") else 6
         self.main_layout.setContentsMargins(4, top_margin, 4, bottom_margin)
+        
+        if self.avatar_lbl and self._avatar_pixmap:
+            if pos in ("single", "top"):
+                self.avatar_lbl.setPixmap(self._avatar_pixmap)
+            else:
+                empty = QPixmap(32, 32)
+                empty.fill(Qt.GlobalColor.transparent)
+                self.avatar_lbl.setPixmap(empty)
 
     def update_width(self, w):
         max_w = int(w * 0.75)
@@ -728,6 +764,7 @@ class MainWindow(QMainWindow):
         self.setWindowTitle("RobloxChats")
         self.resize(1000, 700)
         self.app_active = False
+        self.config = load_config()
         
         self.setup_ui()
         
@@ -778,6 +815,54 @@ class MainWindow(QMainWindow):
         self.conv_list.setItemDelegate(ChatListDelegate(self.conv_list))
         self.conv_list.itemClicked.connect(self.on_conv_selected)
         sidebar_layout.addWidget(self.conv_list)
+        
+        self.profile_btn = QPushButton()
+        self.profile_btn.setObjectName("profile_btn")
+        self.profile_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.profile_btn.clicked.connect(self.open_settings)
+        self.profile_btn.setFixedHeight(48)
+        self.profile_btn.setStyleSheet("""
+            QPushButton#profile_btn {
+                border: none;
+                border-radius: 12px;
+                background-color: palette(light);
+            }
+            QPushButton#profile_btn:hover {
+                background-color: palette(midlight);
+            }
+            QPushButton#profile_btn:pressed {
+                background-color: palette(mid);
+            }
+        """)
+        
+        profile_layout = QHBoxLayout()
+        profile_layout.setContentsMargins(12, 8, 12, 8)
+        profile_layout.setSpacing(10)
+        
+        self.profile_avatar = QLabel()
+        self.profile_avatar.setFixedSize(32, 32)
+        self.profile_avatar.setStyleSheet("background: transparent;")
+        profile_layout.addWidget(self.profile_avatar)
+        
+        self.profile_name = QLabel("Not logged in")
+        self.profile_name.setStyleSheet("font-size: 13px; background: transparent;")
+        profile_layout.addWidget(self.profile_name, 1)
+        
+        settings_icon = QLabel("\u2699")
+        settings_icon.setStyleSheet("font-size: 18px; background: transparent; color: palette(placeholderText);")
+        settings_icon.setFixedWidth(24)
+        settings_icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        profile_layout.addWidget(settings_icon)
+        
+        self.profile_btn.setLayout(profile_layout)
+        
+        profile_wrapper = QWidget()
+        profile_wrapper_layout = QVBoxLayout()
+        profile_wrapper_layout.setContentsMargins(4, 0, 4, 4)
+        profile_wrapper_layout.addWidget(self.profile_btn)
+        profile_wrapper.setLayout(profile_wrapper_layout)
+        sidebar_layout.addWidget(profile_wrapper)
+        
         sidebar_container.setLayout(sidebar_layout)
         
         right_panel = QVBoxLayout()
@@ -882,13 +967,46 @@ class MainWindow(QMainWindow):
                 with open(".env", "w") as f:
                     f.write(f"ROBLOSECURITY={new_cookie}\n")
                 self.cookie = new_cookie
+                self.config["minimize_to_tray"] = dialog.get_minimize_to_tray()
+                save_config(self.config)
                 if not api.get_current_user():
                     QMessageBox.warning(self, "Error", "Invalid cookie. Restart app to try again.")
                     return
             else:
                 return
                 
+        self._update_profile_button()
         self.refresh_chats()
+    
+    def _update_profile_button(self):
+        name = api.my_display_name or api.my_username or "User"
+        self.profile_name.setText(name)
+        
+        avatar_path = os.path.join(ASSETS_DIR, f"roblox_avatar_{api.my_user_id}.png")
+        if not os.path.exists(avatar_path):
+            avatar_path = download_avatar_sync(str(api.my_user_id))
+        
+        pixmap = get_circular_pixmap(avatar_path, 32) if avatar_path else QPixmap(32, 32)
+        self.profile_avatar.setPixmap(pixmap)
+    
+    def open_settings(self):
+        dialog = SettingsDialog(self)
+        dialog.cookie_input.setText(self.cookie or "")
+        dialog.tray_checkbox.setChecked(self.config.get("minimize_to_tray", True))
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            new_cookie = dialog.get_cookie()
+            if new_cookie != self.cookie:
+                api.update_cookie(new_cookie)
+                with open(".env", "w") as f:
+                    f.write(f"ROBLOSECURITY={new_cookie}\n")
+                self.cookie = new_cookie
+                if api.get_current_user():
+                    self._update_profile_button()
+                    self.refresh_chats()
+                else:
+                    QMessageBox.warning(self, "Error", "Invalid cookie.")
+            self.config["minimize_to_tray"] = dialog.get_minimize_to_tray()
+            save_config(self.config)
             
     def refresh_chats(self):
         self.conv_list.clear()
@@ -1080,6 +1198,7 @@ class MainWindow(QMainWindow):
             else: pos = "single"
                 
             widget.set_group_pos(pos)
+            item.setSizeHint(widget.sizeHint())
 
     def on_messages_loaded(self, msgs, user_data, next_cursor, is_prepend):
         self.current_next_cursor = next_cursor if next_cursor else None
@@ -1218,10 +1337,12 @@ class MainWindow(QMainWindow):
         self.msg_input.clear()
         
         item = QListWidgetItem()
-        widget = MessageWidget(text, True, None, animate=True)
+        now = datetime.now().astimezone()
+        widget = MessageWidget(text, True, None, animate=True, sender_id=str(api.my_user_id), timestamp=now)
         item.setSizeHint(widget.sizeHint())
         self.msg_list.addItem(item)
         self.msg_list.setItemWidget(item, widget)
+        self._update_all_groupings()
         self.msg_list.scrollToBottom()
         
         self.sender_thread = MessageSenderThread(self.current_conv_id, text)
@@ -1251,6 +1372,7 @@ class MainWindow(QMainWindow):
             
             self.msg_list.addItem(item)
             self.msg_list.setItemWidget(item, widget)
+            self._update_all_groupings()
             self.msg_list.scrollToBottom()
         else:
             self.unread_convs.add(cid)
@@ -1289,8 +1411,12 @@ class MainWindow(QMainWindow):
             self.activateWindow()
         
     def closeEvent(self, event):
-        event.ignore()
-        self.hide()
+        if self.config.get("minimize_to_tray", True):
+            event.ignore()
+            self.hide()
+        else:
+            event.accept()
+            QApplication.quit()
 
 def main():
     parser = argparse.ArgumentParser(description="RobloxChats Desktop Client")
@@ -1305,13 +1431,32 @@ def main():
     app.setQuitOnLastWindowClosed(False)
     app.setStyleSheet(QSS_CUSTOM_WIDGETS)
     
+    server_name = "RobloxChats_" + str(os.stat(os.path.expanduser("~")).st_dev) + "_" + str(os.getuid())
+    socket = QLocalSocket()
+    socket.connectToServer(server_name)
+    
+    if socket.waitForConnected(500):
+        socket.write(b"activate")
+        socket.waitForBytesWritten(1000)
+        socket.disconnectFromServer()
+        print("Another instance is already running. Focused existing window.")
+        sys.exit(0)
+    
+    socket.close()
+    local_server = QLocalServer()
+    local_server.listen(server_name)
+    
     window = MainWindow(args.minimized)
+    local_server.newConnection.connect(lambda: window.activateWindow() if not window.isActiveWindow() else None)
+    local_server.newConnection.connect(lambda: window.showNormal() if window.isMinimized() else None)
+    local_server.newConnection.connect(lambda: window.raise_())
     
     def on_quit():
         window.notifier_thread.running = False
         window.notifier_thread.wait()
         window.presence_thread.running = False
         window.presence_thread.wait()
+        local_server.close()
         
     app.aboutToQuit.connect(on_quit)
     sys.exit(app.exec())
