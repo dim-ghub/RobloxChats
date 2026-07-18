@@ -324,7 +324,8 @@ class MessageWidget(QWidget):
             self.fade_anim.setStartValue(0.0)
             self.fade_anim.setEndValue(1.0)
             self.fade_anim.setEasingCurve(QEasingCurve.Type.OutQuad)
-            self.fade_anim.finished.connect(lambda: self.setGraphicsEffect(None))
+            self.fade_anim.finished.connect(self._on_fade_finished)
+            self._fade_cleaned_up = False
         
         message_column = QVBoxLayout()
         message_column.setSpacing(4)
@@ -462,6 +463,18 @@ class MessageWidget(QWidget):
             self.content_lbl.setFixedWidth(min(ideal_w, max_w))
         if hasattr(self, 'bubble_container'):
             self.bubble_container.setMaximumWidth(max_w)
+
+    def _on_fade_finished(self):
+        if not self._fade_cleaned_up:
+            self._fade_cleaned_up = True
+            self.setGraphicsEffect(None)
+
+    def hideEvent(self, event):
+        super().hideEvent(event)
+        if self.should_animate and hasattr(self, 'fade_anim') and not self._fade_cleaned_up:
+            self.fade_anim.stop()
+            self._fade_cleaned_up = True
+            self.fade_anim.disconnect()
 
     def showEvent(self, event):
         super().showEvent(event)
