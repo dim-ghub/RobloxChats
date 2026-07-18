@@ -266,7 +266,7 @@ class MessageWidget(QWidget):
                 avatar_lbl = QLabel()
                 avatar_lbl.setPixmap(get_circular_pixmap(avatar_path, 36))
                 avatar_lbl.setFixedSize(36, 36)
-                layout.addWidget(avatar_lbl, alignment=Qt.AlignmentFlag.AlignBottom)
+                layout.addWidget(avatar_lbl, alignment=Qt.AlignmentFlag.AlignTop)
             else:
                 spacer = QWidget()
                 spacer.setFixedSize(36, 36)
@@ -304,17 +304,18 @@ def download_avatar_sync(user_id):
     return None
 
 class ChatLoaderThread(QThread):
-    finished_signal = pyqtSignal(list, dict)
+    finished_signal = pyqtSignal(list, dict, str, bool)
     
-    def __init__(self, conv_id, conv_map):
+    def __init__(self, conv_id, conv_map, cursor=None):
         super().__init__()
         self.conv_id = conv_id
         self.conv_map = conv_map
+        self.cursor = cursor
         
     def run(self):
-        msgs = api.fetch_messages(self.conv_id)
+        msgs, next_cursor = api.fetch_messages(self.conv_id, self.cursor)
         user_data = self.conv_map.get(self.conv_id, {}).get("user_data", {})
-        self.finished_signal.emit(msgs, user_data)
+        self.finished_signal.emit(msgs, user_data, next_cursor or "", self.cursor is not None)
 
 class MessageSenderThread(QThread):
     finished_signal = pyqtSignal(bool)
@@ -408,7 +409,7 @@ class NotifierThread(QThread):
         try:
             convs = await asyncio.to_thread(api.fetch_conversations)
             for conv in convs[:5]:
-                msgs = await asyncio.to_thread(api.fetch_messages, conv.get("id"))
+                msgs, _ = await asyncio.to_thread(api.fetch_messages, conv.get("id"))
                 for m in msgs:
                     seen_messages.add(m.get("id"))
         except:
@@ -426,7 +427,7 @@ class NotifierThread(QThread):
                 convs = await asyncio.to_thread(api.fetch_conversations)
                 for conv in convs[:5]:
                     conv_id = conv.get("id")
-                    msgs = await asyncio.to_thread(api.fetch_messages, conv_id)
+                    msgs, _ = await asyncio.to_thread(api.fetch_messages, conv_id)
                     for m in msgs:
                         msg_id = m.get("id")
                         if msg_id and msg_id not in seen_messages:
@@ -528,6 +529,7 @@ class MainWindow(QMainWindow):
         self.msg_list = QListWidget()
         self.msg_list.setObjectName("msg_list")
         self.msg_list.setVerticalScrollMode(QListWidget.ScrollMode.ScrollPerPixel)
+        self.msg_list.verticalScrollBar().valueChanged.connect(self.on_scroll_changed)
         
         input_container = InputContainerWidget()
         input_layout = QHBoxLayout()
@@ -579,6 +581,8 @@ class MainWindow(QMainWindow):
         self.setCentralWidget(central)
         
         self.current_conv_id = None
+        self.current_next_cursor = None
+        self.is_loading_history = False
         self.conv_map = {}
         self.presence_map = {}
         self.unread_convs = set()
@@ -680,10 +684,20 @@ class MainWindow(QMainWindow):
         if changed:
             self.refresh_chats()
             
+    def on_scroll_changed(self, value):
+        if value == 0 and self.current_next_cursor and not self.is_loading_history:
+            self.is_loading_history = True
+            self.loader_thread = ChatLoaderThread(self.current_conv_id, self.conv_map, cursor=self.current_next_cursor)
+            self.loader_thread.finished_signal.connect(self.on_messages_loaded)
+            self.loader_thread.start()
+
     def on_conv_selected(self, item):
         cid = item.data(Qt.ItemDataRole.UserRole)
         if cid:
             self.current_conv_id = cid
+            self.current_next_cursor = None
+            self.is_loading_history = False
+            
             if cid in self.unread_convs:
                 self.unread_convs.remove(cid)
                 self.refresh_chats()
@@ -725,11 +739,18 @@ class MainWindow(QMainWindow):
         day = str(dt.day)
         return f"{dt.strftime('%b')} {day} {dt.year} | {time_str}"
             
-    def on_messages_loaded(self, msgs, user_data):
-        self.msg_list.clear()
+    def on_messages_loaded(self, msgs, user_data, next_cursor, is_prepend):
+        self.current_next_cursor = next_cursor if next_cursor else None
+        
+        if not is_prepend:
+            self.msg_list.clear()
+            
+        old_scroll_max = self.msg_list.verticalScrollBar().maximum()
+        old_scroll_val = self.msg_list.verticalScrollBar().value()
         
         last_time = None
         last_sender = None
+        insert_row = 0
         
         for m in reversed(msgs):
             sender_id = str(m.get("sender_user_id", m.get("senderTargetId", m.get("senderUserId"))))
@@ -745,8 +766,15 @@ class MainWindow(QMainWindow):
                         lbl.setStyleSheet("color: palette(placeholderText); font-size: 12px; font-weight: bold; padding: 16px 0px 8px 0px;")
                         lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
                         ts_item.setSizeHint(lbl.sizeHint())
-                        self.msg_list.addItem(ts_item)
-                        self.msg_list.setItemWidget(ts_item, lbl)
+                        
+                        if is_prepend:
+                            self.msg_list.insertItem(insert_row, ts_item)
+                            self.msg_list.setItemWidget(ts_item, lbl)
+                            insert_row += 1
+                        else:
+                            self.msg_list.addItem(ts_item)
+                            self.msg_list.setItemWidget(ts_item, lbl)
+                            
                         last_sender = None
                     last_time = dt
                 except:
@@ -766,11 +794,25 @@ class MainWindow(QMainWindow):
             
             item.setSizeHint(widget.sizeHint())
             
-            self.msg_list.addItem(item)
-            self.msg_list.setItemWidget(item, widget)
+            if is_prepend:
+                self.msg_list.insertItem(insert_row, item)
+                self.msg_list.setItemWidget(item, widget)
+                insert_row += 1
+            else:
+                self.msg_list.addItem(item)
+                self.msg_list.setItemWidget(item, widget)
+                
             last_sender = sender_id
             
-        self.msg_list.scrollToBottom()
+        if is_prepend:
+            QApplication.processEvents()
+            new_scroll_max = self.msg_list.verticalScrollBar().maximum()
+            delta = new_scroll_max - old_scroll_max
+            self.msg_list.verticalScrollBar().setValue(old_scroll_val + delta)
+        else:
+            self.msg_list.scrollToBottom()
+            
+        self.is_loading_history = False
         
     def on_input_changed(self, text):
         if text and self.current_conv_id:

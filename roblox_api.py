@@ -41,14 +41,18 @@ class RobloxAPI:
         logging.error(f"Failed to fetch conversations: {res.status_code} {res.text}")
         return []
 
-    def fetch_messages(self, conv_id):
+    def fetch_messages(self, conv_id, cursor=None):
         url = f"https://apis.roblox.com/platform-chat-api/v1/get-conversation-messages?conversation_id={conv_id}&pageSize=50"
+        if cursor:
+            url += f"&cursor={cursor}"
         res = self.session.get(url, timeout=10)
         if res.status_code == 200:
             data = res.json()
-            return data if isinstance(data, list) else data.get("messages", data.get("data", data))
+            msgs = data if isinstance(data, list) else data.get("messages", data.get("data", data))
+            next_cursor = data.get("next_cursor") if isinstance(data, dict) else None
+            return msgs, next_cursor
         logging.error(f"Failed to fetch messages for conv {conv_id}: {res.status_code} {res.text}")
-        return []
+        return [], None
 
     def send_message(self, conv_id, text):
         url = "https://apis.roblox.com/platform-chat-api/v1/send-messages"
