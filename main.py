@@ -1079,7 +1079,7 @@ class MainWindow(QMainWindow):
                 avatar_path = download_avatar_sync(sender_id)
                 
             item = QListWidgetItem()
-            msg_id = msg.get("id")
+            msg_id = m.get("id")
             if msg_id:
                 item.setData(Qt.ItemDataRole.UserRole, msg_id)
             widget = MessageWidget(content, is_self, avatar_path, reply_data, animate=False)
