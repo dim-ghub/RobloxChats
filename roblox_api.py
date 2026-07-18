@@ -56,13 +56,44 @@ class RobloxAPI:
             "conversation_id": conv_id,
             "messages": [{"content": text}]
         }
-        res = self.session.post(url, json=payload, timeout=10)
-        if self.check_csrf(res):
+        try:
             res = self.session.post(url, json=payload, timeout=10)
-        if res.status_code == 200:
-            return True
-        logging.error(f"Failed to send message: {res.status_code} {res.text}")
-        return False
+            if self.check_csrf(res):
+                res = self.session.post(url, json=payload, timeout=10)
+            if res.status_code in [200, 204]:
+                return True
+            return False
+        except:
+            return False
+            
+    def update_typing_status(self, conv_id, is_typing=True):
+        url = "https://apis.roblox.com/platform-chat-api/v1/update-typing-status"
+        payload = {
+            "conversation_id": conv_id,
+            "is_typing": is_typing
+        }
+        try:
+            self.session.post(url, json=payload, timeout=5)
+        except:
+            pass
+            
+    def get_presence(self, user_ids):
+        url = "https://presence.roblox.com/v1/presence/users"
+        payload = {"userIds": user_ids}
+        try:
+            res = self.session.post(url, json=payload, timeout=10)
+            if res.status_code == 200:
+                return res.json().get("userPresences", [])
+        except:
+            pass
+        return []
+        
+    def send_heartbeat(self):
+        url = "https://apis.roblox.com/user-heartbeats-api/pulse"
+        try:
+            self.session.post(url, timeout=5)
+        except:
+            pass
 
     def get_user_avatar(self, user_id):
         res = self.session.get(f"https://thumbnails.roblox.com/v1/users/avatar-headshot?userIds={user_id}&size=48x48&format=Png&isCircular=false", timeout=10)

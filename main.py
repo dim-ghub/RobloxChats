@@ -5,6 +5,7 @@ import argparse
 import asyncio
 import logging
 import dateutil.parser
+import time
 from pathlib import Path
 from dotenv import load_dotenv
 
@@ -34,29 +35,36 @@ QListWidget {
     outline: none;
 }
 
-/* Chat Bubbles */
+/* Floating Sidebar Container */
+QWidget#sidebar_container {
+    background-color: palette(base);
+    border-radius: 16px;
+    margin: 8px;
+}
+
+/* Chat Bubbles using standard Palette colors */
 MessageWidget[is_self="true"] QWidget#bubble_container {
-    background-color: #a5d8d3;
-    border-radius: 12px;
+    background-color: palette(highlight);
+    border-radius: 16px;
 }
 MessageWidget[is_self="false"] QWidget#bubble_container {
-    background-color: #1c2826;
-    border-radius: 12px;
+    background-color: palette(alternate-base);
+    border-radius: 16px;
 }
 QLabel#self_msg_text {
-    color: #111111;
+    color: palette(highlighted-text);
     font-size: 14px;
     background: transparent;
 }
 QLabel#other_msg_text {
-    color: #e0e0e0;
+    color: palette(text);
     font-size: 14px;
     background: transparent;
 }
 
 /* Timestamp */
 QLabel#timestamp_label {
-    color: #707a78;
+    color: palette(placeholderText);
     font-size: 12px;
     font-weight: bold;
     padding: 16px 0px 8px 0px;
@@ -64,8 +72,9 @@ QLabel#timestamp_label {
 
 /* Input Area mimicking the AI app */
 QWidget#input_container {
-    background-color: #161f1d;
+    background-color: palette(base);
     border-radius: 24px;
+    border: 1px solid palette(mid);
 }
 QLineEdit#msg_input {
     background: transparent;
@@ -75,8 +84,8 @@ QLineEdit#msg_input {
     font-size: 14px;
 }
 QPushButton#send_btn {
-    background-color: #243330;
-    color: #a5d8d3;
+    background-color: palette(button);
+    color: palette(button-text);
     border-radius: 16px;
     font-size: 16px;
     font-weight: bold;
@@ -84,14 +93,15 @@ QPushButton#send_btn {
     border: none;
 }
 QPushButton#send_btn:hover {
-    background-color: #2d403c;
+    background-color: palette(highlight);
+    color: palette(highlighted-text);
 }
 """
 
 def get_circular_pixmap(image_path, size=48):
     if not image_path or not os.path.exists(image_path):
         pixmap = QPixmap(size, size)
-        pixmap.fill(QColor("#1c2826")) # Matching the dark teal for fallbacks
+        pixmap.fill(Qt.GlobalColor.transparent)
     else:
         pixmap = QPixmap(image_path).scaled(
             size, size, Qt.AspectRatioMode.KeepAspectRatioByExpanding, Qt.TransformationMode.SmoothTransformation
@@ -106,7 +116,6 @@ def get_circular_pixmap(image_path, size=48):
     path = QPainterPath()
     path.addEllipse(0, 0, size, size)
     painter.setClipPath(path)
-    painter.fillPath(path, QColor("#1c2826"))
     painter.drawPixmap(0, 0, pixmap)
     painter.end()
     return target
@@ -139,11 +148,12 @@ class SettingsDialog(QDialog):
         return self.cookie_input.text().strip()
 
 class ConversationWidget(QWidget):
-    def __init__(self, title, preview_text, avatar_path=None):
+    def __init__(self, title, preview_text, avatar_path=None, presence_type=0):
         super().__init__()
         layout = QHBoxLayout()
         layout.setContentsMargins(12, 12, 12, 12)
         
+        # Avatar with Presence Dot
         avatar_lbl = QLabel()
         avatar_lbl.setPixmap(get_circular_pixmap(avatar_path, 40))
         avatar_lbl.setFixedSize(40, 40)
@@ -151,13 +161,21 @@ class ConversationWidget(QWidget):
         text_layout = QVBoxLayout()
         text_layout.setSpacing(2)
         
-        title_lbl = QLabel(title)
+        # Presence status string
+        presence_str = ""
+        if presence_type == 1:
+            presence_str = " (Online)"
+        elif presence_type == 2:
+            presence_str = " (In-Game)"
+        elif presence_type == 3:
+            presence_str = " (Studio)"
+            
+        title_lbl = QLabel(f"{title}{presence_str}")
         title_lbl.setFont(QFont("Segoe UI", 11, QFont.Weight.Bold))
-        # Removed hardcoded colors so it uses native OS text color
         
         preview_lbl = QLabel()
         preview_lbl.setFont(QFont("Segoe UI", 10))
-        preview_lbl.setStyleSheet("color: palette(placeholderText);") # Uses OS native muted text color
+        preview_lbl.setStyleSheet("color: palette(placeholderText);")
         
         metrics = preview_lbl.fontMetrics()
         preview_text = preview_text.replace("\n", " ")
@@ -261,6 +279,33 @@ class MessageSenderThread(QThread):
         success = api.send_message(self.conv_id, self.text)
         self.finished_signal.emit(success)
 
+class PresencePollingThread(QThread):
+    presence_signal = pyqtSignal(dict)
+    
+    def __init__(self):
+        super().__init__()
+        self.running = True
+        self.user_ids = set()
+        
+    def set_user_ids(self, user_ids):
+        self.user_ids = set(user_ids)
+        
+    def run(self):
+        while self.running:
+            try:
+                if self.user_ids:
+                    presences = api.get_presence(list(self.user_ids))
+                    pres_dict = {str(p["userId"]): p["userPresenceType"] for p in presences}
+                    self.presence_signal.emit(pres_dict)
+                api.send_heartbeat()
+            except:
+                pass
+            
+            for _ in range(15):
+                if not self.running: return
+                time.sleep(1)
+
+
 class NotifierThread(QThread):
     new_message_signal = pyqtSignal(dict)
     
@@ -279,8 +324,8 @@ class NotifierThread(QThread):
                 if res.status_code == 200:
                     with open(logo_path, "wb") as f:
                         f.write(res.content)
-            except Exception as e:
-                logging.error(f"Failed to download logo: {e}")
+            except:
+                pass
                 
         app_icon_obj = None
         if os.path.exists(logo_path):
@@ -316,11 +361,9 @@ class NotifierThread(QThread):
                 msgs = await asyncio.to_thread(api.fetch_messages, conv.get("id"))
                 for m in msgs:
                     seen_messages.add(m.get("id"))
-        except Exception as e:
-            logging.error(f"Error pre-populating messages: {e}")
+        except:
+            pass
                 
-        logging.info("Started background notification listener.")
-        
         while self.running:
             try:
                 convs = await asyncio.to_thread(api.fetch_conversations)
@@ -366,8 +409,8 @@ class NotifierThread(QThread):
                                 on_clicked=on_clicked,
                                 buttons=[Button(title="Open in browser", on_pressed=on_clicked)]
                             )
-            except Exception as e:
-                logging.error(f"Polling error: {e}")
+            except:
+                pass
                 
             for _ in range(5):
                 if not self.running: return
@@ -388,6 +431,10 @@ class MainWindow(QMainWindow):
         if not start_minimized:
             self.show()
             
+        self.typing_timer = QTimer()
+        self.typing_timer.setInterval(4000)
+        self.typing_timer.timeout.connect(self.send_typing_indicator)
+            
         QTimer.singleShot(100, self.post_init)
         
     def setup_ui(self):
@@ -396,9 +443,16 @@ class MainWindow(QMainWindow):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
         
+        # Floating Sidebar
+        sidebar_container = QWidget()
+        sidebar_container.setObjectName("sidebar_container")
+        sidebar_layout = QVBoxLayout()
+        sidebar_layout.setContentsMargins(0, 0, 0, 0)
+        
         self.conv_list = QListWidget()
-        self.conv_list.setObjectName("conv_list")
         self.conv_list.itemClicked.connect(self.on_conv_selected)
+        sidebar_layout.addWidget(self.conv_list)
+        sidebar_container.setLayout(sidebar_layout)
         
         right_panel = QVBoxLayout()
         right_panel.setContentsMargins(0, 0, 0, 0)
@@ -406,7 +460,6 @@ class MainWindow(QMainWindow):
         self.msg_list = QListWidget()
         self.msg_list.setVerticalScrollMode(QListWidget.ScrollMode.ScrollPerPixel)
         
-        # New Input Area mimicking AI app
         input_container = QWidget()
         input_container.setObjectName("input_container")
         input_layout = QHBoxLayout()
@@ -417,6 +470,7 @@ class MainWindow(QMainWindow):
         self.msg_input.setObjectName("msg_input")
         self.msg_input.setPlaceholderText("Send a message")
         self.msg_input.returnPressed.connect(self.send_message)
+        self.msg_input.textChanged.connect(self.on_input_changed)
         
         self.send_btn = QPushButton("↑")
         self.send_btn.setObjectName("send_btn")
@@ -439,7 +493,7 @@ class MainWindow(QMainWindow):
         right_widget.setLayout(right_panel)
         
         splitter = QSplitter(Qt.Orientation.Horizontal)
-        splitter.addWidget(self.conv_list)
+        splitter.addWidget(sidebar_container)
         splitter.addWidget(right_widget)
         splitter.setSizes([320, 680])
         splitter.setHandleWidth(1)
@@ -450,6 +504,7 @@ class MainWindow(QMainWindow):
         
         self.current_conv_id = None
         self.conv_map = {}
+        self.presence_map = {}
         
     def post_init(self):
         self.setup_tray()
@@ -457,6 +512,10 @@ class MainWindow(QMainWindow):
         self.notifier_thread = NotifierThread()
         self.notifier_thread.new_message_signal.connect(self.on_new_message)
         self.notifier_thread.start()
+        
+        self.presence_thread = PresencePollingThread()
+        self.presence_thread.presence_signal.connect(self.on_presence_updated)
+        self.presence_thread.start()
         
         self.check_login()
         
@@ -486,6 +545,8 @@ class MainWindow(QMainWindow):
         self.conv_list.clear()
         convs = api.fetch_conversations()
         
+        tracked_users = set()
+        
         for conv in convs:
             cid = conv.get("id")
             self.conv_map[cid] = conv
@@ -493,35 +554,54 @@ class MainWindow(QMainWindow):
             user_data = conv.get("user_data", {})
             title = conv.get("name") or conv.get("title")
             avatar_path = None
+            presence_type = 0
+            
+            participants = conv.get("participant_user_ids", [])
+            if not participants and "participants" in conv:
+                participants = [p.get("targetId") for p in conv["participants"]]
+                
+            for p_id in participants:
+                if str(p_id) != str(api.my_user_id):
+                    tracked_users.add(p_id)
             
             if not title:
-                participants = conv.get("participant_user_ids", [])
-                if not participants and "participants" in conv:
-                    participants = [p.get("targetId") for p in conv["participants"]]
-                    
                 names = []
                 for p_id in participants:
                     if str(p_id) != str(api.my_user_id):
                         names.append(extract_name(p_id, user_data))
                         if not avatar_path:
                             avatar_path = download_avatar_sync(p_id)
+                            presence_type = self.presence_map.get(str(p_id), 0)
                 title = ", ".join(names) if names else cid
             else:
                 for u in user_data.values():
                     uid = u.get("id")
                     if str(uid) != str(api.my_user_id):
                         avatar_path = download_avatar_sync(uid)
+                        presence_type = self.presence_map.get(str(uid), 0)
                         break
 
             preview = conv.get("preview_message", {}).get("content", "No messages yet")
             
             item = QListWidgetItem()
-            widget = ConversationWidget(title, preview, avatar_path)
+            widget = ConversationWidget(title, preview, avatar_path, presence_type)
             item.setSizeHint(widget.sizeHint())
             item.setData(Qt.ItemDataRole.UserRole, cid)
             
             self.conv_list.addItem(item)
             self.conv_list.setItemWidget(item, widget)
+            
+        self.presence_thread.set_user_ids(tracked_users)
+            
+    def on_presence_updated(self, pres_dict):
+        # Only refresh if presence changed
+        changed = False
+        for uid, p_type in pres_dict.items():
+            if self.presence_map.get(uid) != p_type:
+                self.presence_map[uid] = p_type
+                changed = True
+        if changed:
+            self.refresh_chats()
             
     def on_conv_selected(self, item):
         cid = item.data(Qt.ItemDataRole.UserRole)
@@ -583,6 +663,20 @@ class MainWindow(QMainWindow):
             last_sender = sender_id
             
         self.msg_list.scrollToBottom()
+        
+    def on_input_changed(self, text):
+        if text and self.current_conv_id:
+            if not self.typing_timer.isActive():
+                self.send_typing_indicator()
+                self.typing_timer.start()
+        else:
+            self.typing_timer.stop()
+            
+    def send_typing_indicator(self):
+        if self.current_conv_id:
+            # We fire and forget this network request on a throwaway thread to avoid blocking GUI
+            t = QThread.create(lambda: api.update_typing_status(self.current_conv_id, True))
+            t.start()
             
     def send_message(self):
         if not self.current_conv_id: return
@@ -590,31 +684,30 @@ class MainWindow(QMainWindow):
         if not text: return
         
         self.msg_input.clear()
-        self.msg_input.setEnabled(False)
-        self.send_btn.setEnabled(False)
         
+        # Optimistic UI update
+        item = QListWidgetItem()
+        widget = MessageWidget(text, True, None)
+        widget.style().unpolish(widget)
+        widget.style().polish(widget)
+        item.setSizeHint(widget.sizeHint())
+        self.msg_list.addItem(item)
+        self.msg_list.setItemWidget(item, widget)
+        self.msg_list.scrollToBottom()
+        
+        # Background send
         self.sender_thread = MessageSenderThread(self.current_conv_id, text)
-        self.sender_thread.finished_signal.connect(self.on_message_sent)
+        # We no longer reload everything on success since we optimistically updated.
+        # But we could optionally handle failure if success == False
         self.sender_thread.start()
         
-    def on_message_sent(self, success):
-        self.msg_input.setEnabled(True)
-        self.send_btn.setEnabled(True)
-        self.msg_input.setFocus()
-        if success:
-            self.loader_thread = ChatLoaderThread(self.current_conv_id, self.conv_map)
-            self.loader_thread.finished_signal.connect(self.on_messages_loaded)
-            self.loader_thread.start()
-        else:
-            QMessageBox.warning(self, "Error", "Failed to send message.")
-            
     def on_new_message(self, data):
         if self.current_conv_id == data["conv_id"]:
             is_self = data.get("sender_id") == str(api.my_user_id)
-            avatar_path = None
-            if not is_self:
-                avatar_path = os.path.join(ASSETS_DIR, f"roblox_avatar_{data.get('sender_id')}.png")
+            if is_self:
+                return # Already handled by optimistic UI update
                 
+            avatar_path = os.path.join(ASSETS_DIR, f"roblox_avatar_{data.get('sender_id')}.png")
             item = QListWidgetItem()
             widget = MessageWidget(data["content"], is_self, avatar_path)
             widget.style().unpolish(widget)
@@ -661,12 +754,7 @@ class MainWindow(QMainWindow):
     def closeEvent(self, event):
         event.ignore()
         self.hide()
-        self.tray.showMessage(
-            "RobloxChats",
-            "Application minimized to tray.",
-            QSystemTrayIcon.MessageIcon.Information,
-            2000
-        )
+        # Removed tray notification as requested
 
 def main():
     parser = argparse.ArgumentParser(description="RobloxChats Desktop Client")
@@ -682,6 +770,8 @@ def main():
     def on_quit():
         window.notifier_thread.running = False
         window.notifier_thread.wait()
+        window.presence_thread.running = False
+        window.presence_thread.wait()
         
     app.aboutToQuit.connect(on_quit)
     sys.exit(app.exec())
