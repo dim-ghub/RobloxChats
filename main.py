@@ -118,16 +118,15 @@ class BubbleWidget(QWidget):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         
-        pal = self.palette()
         if self.is_self:
-            bg_color = pal.color(QPalette.ColorRole.Highlight)
+            bg_color = QApplication.palette().color(QPalette.ColorGroup.Active, QPalette.ColorRole.Highlight)
         else:
-            bg_color = pal.color(QPalette.ColorRole.Base)
+            bg_color = QApplication.palette().color(QPalette.ColorGroup.Active, QPalette.ColorRole.Button)
             if bg_color.lightness() < 128:
-                bg_color = bg_color.lighter(150)
+                bg_color = bg_color.lighter(130)
             else:
                 bg_color = bg_color.darker(110)
-            
+                
         painter.setBrush(bg_color)
         painter.setPen(Qt.PenStyle.NoPen)
         painter.drawRoundedRect(self.rect(), 16, 16)
@@ -242,7 +241,7 @@ class ConversationWidget(QWidget):
         
         line = QFrame()
         line.setFrameShape(QFrame.Shape.HLine)
-        line.setStyleSheet("background-color: rgba(128, 128, 128, 0.15); border: none; min-height: 1px; max-height: 1px;")
+        line.setStyleSheet("background-color: rgba(128, 128, 128, 0.15); border: none; min-height: 1px; max-height: 1px; margin: 6px 12px;")
         
         main_layout.addLayout(inner_layout)
         main_layout.addWidget(line)
@@ -272,9 +271,14 @@ class MessageWidget(QWidget):
         
         content_lbl = QLabel(content)
         content_lbl.setWordWrap(True)
-        # Force text color using styling to inherit palette correctly
-        content_lbl.setStyleSheet(f"color: {'palette(highlighted-text)' if is_self else 'palette(text)'}; background: transparent;")
-        
+        # Force text color using styling to inherit Active palette correctly so it doesn't change when unfocused
+        if is_self:
+            active_text = QApplication.palette().color(QPalette.ColorGroup.Active, QPalette.ColorRole.HighlightedText).name()
+            content_lbl.setStyleSheet(f"color: {active_text}; font-size: 14px;")
+        else:
+            active_text = QApplication.palette().color(QPalette.ColorGroup.Active, QPalette.ColorRole.WindowText).name()
+            content_lbl.setStyleSheet(f"color: {active_text}; font-size: 14px;")
+            
         bubble_layout.addWidget(content_lbl)
         
         bubble_container = BubbleWidget(is_self)
