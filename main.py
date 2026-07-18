@@ -159,29 +159,6 @@ class PopInEffect(QGraphicsEffect):
         self.drawSource(painter)
         painter.restore()
 
-class FadeEffect(QGraphicsEffect):
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self._progress = 1.0
-        
-    @pyqtProperty(float)
-    def progress(self):
-        return self._progress
-        
-    @progress.setter
-    def progress(self, val):
-        self._progress = val
-        self.update()
-        
-    def draw(self, painter):
-        if self._progress < 0.01:
-            return
-            
-        painter.save()
-        painter.setOpacity(self._progress)
-        self.drawSource(painter)
-        painter.restore()
-
 class BubbleWidget(QFrame):
     def __init__(self, is_self, parent=None):
         super().__init__(parent)
@@ -803,7 +780,24 @@ class MainWindow(QMainWindow):
         bottom_panel.addWidget(self.system_msg_lbl)
         bottom_panel.addWidget(input_container)
         
-        right_panel.addWidget(self.msg_list)
+        self.msg_stack = QWidget()
+        stack_layout = QStackedLayout(self.msg_stack)
+        stack_layout.setStackingMode(QStackedLayout.StackingMode.StackAll)
+        
+        self.fade_overlay = QFrame()
+        self.fade_overlay.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+        self.fade_overlay.setStyleSheet("background-color: transparent;")
+        
+        self.fade_anim = QVariantAnimation(self)
+        self.fade_anim.setDuration(150)
+        self.fade_anim.setStartValue(255)
+        self.fade_anim.setEndValue(0)
+        self.fade_anim.valueChanged.connect(self._update_fade_overlay)
+        
+        stack_layout.addWidget(self.fade_overlay)
+        stack_layout.addWidget(self.msg_list)
+        
+        right_panel.addWidget(self.msg_stack)
         right_panel.addLayout(bottom_panel)
         
         right_widget = QWidget()
@@ -939,10 +933,15 @@ class MainWindow(QMainWindow):
             self.loader_thread.finished_signal.connect(self.on_messages_loaded)
             self.loader_thread.start()
 
+    def _update_fade_overlay(self, alpha):
+        pal = self.palette()
+        bg = pal.color(QPalette.ColorRole.Base)
+        self.fade_overlay.setStyleSheet(f"background-color: rgba({bg.red()}, {bg.green()}, {bg.blue()}, {alpha});")
+
     def on_conv_selected(self, item):
         cid = item.data(Qt.ItemDataRole.UserRole)
         if cid:
-            self.msg_list_fade_anim.start()
+            self.fade_anim.start()
             self.current_conv_id = cid
             self.current_next_cursor = None
             self.is_loading_history = False
