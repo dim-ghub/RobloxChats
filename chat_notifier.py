@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 import os
 import time
-import threading
+import asyncio
 import requests
-import subprocess
 import logging
 import sys
+import webbrowser
 from dotenv import load_dotenv
+from desktop_notifier import DesktopNotifier
 
 load_dotenv()
 
@@ -85,27 +86,51 @@ def download_avatar(url, user_id):
                 f.write(res.content)
     return path
 
-def main():
+def download_logo():
+    path = "/tmp/roblox_logo.png"
+    if not os.path.exists(path):
+        try:
+            res = requests.get("https://www.google.com/s2/favicons?domain=roblox.com&sz=128")
+            if res.status_code == 200:
+                with open(path, "wb") as f:
+                    f.write(res.content)
+        except Exception as e:
+            logging.error(f"Failed to download logo: {e}")
+    return path if os.path.exists(path) else None
+
+async def main():
     logging.info("Authenticating...")
     my_user_id = None
     while not my_user_id:
         try:
-            my_user_id = get_current_user()
+            my_user_id = await asyncio.to_thread(get_current_user)
             if not my_user_id:
                 logging.error("Failed to authenticate. Check your ROBLOSECURITY cookie. Retrying in 10 seconds...")
-                time.sleep(10)
+                await asyncio.sleep(10)
         except Exception as e:
             logging.error(f"Network error during authentication: {e}. Retrying in 10 seconds...")
-            time.sleep(10)
-        
+            await asyncio.sleep(10)
+            
     logging.info(f"Authenticated successfully as user {my_user_id}")
+    
+    # Initialize cross-platform notifier
+    logo_path = await asyncio.to_thread(download_logo)
+    app_icon_uri = f"file://{logo_path}" if logo_path else None
+    
+    notifier = DesktopNotifier(
+        app_name="Roblox Chat",
+        app_icon=app_icon_uri
+    )
+    
+    def on_clicked():
+        webbrowser.open("https://www.roblox.com/home")
     
     seen_messages = set()
     
     # Pre-populate seen messages
-    convs = fetch_conversations()
+    convs = await asyncio.to_thread(fetch_conversations)
     for conv in convs:
-        msgs = fetch_messages(conv.get("id"))
+        msgs = await asyncio.to_thread(fetch_messages, conv.get("id"))
         for m in msgs:
             seen_messages.add(m.get("id"))
             
@@ -113,11 +138,11 @@ def main():
     
     while True:
         try:
-            convs = fetch_conversations()
+            convs = await asyncio.to_thread(fetch_conversations)
             # Just check top 5 recent conversations to save API requests
             for conv in convs[:5]:
                 conv_id = conv.get("id")
-                msgs = fetch_messages(conv_id)
+                msgs = await asyncio.to_thread(fetch_messages, conv_id)
                 for m in msgs:
                     msg_id = m.get("id")
                     if msg_id and msg_id not in seen_messages:
@@ -151,28 +176,24 @@ def main():
                         avatar_url = get_user_avatar(sender_id)
                         avatar_path = None
                         if avatar_url:
-                            avatar_path = download_avatar(avatar_url, sender_id)
+                            avatar_path = await asyncio.to_thread(download_avatar, avatar_url, sender_id)
                             
-                        # Send desktop notification and wait for click in a separate thread
-                        def trigger_notification(t, c, ap):
-                            cmd = ["notify-send", "-A", "default=Reply", t, c]
-                            if ap:
-                                cmd.extend(["-i", ap])
-                            try:
-                                # This blocks until the notification is dismissed or clicked
-                                out = subprocess.check_output(cmd, text=True).strip()
-                                if out == "default":
-                                    # Open Roblox in the default browser
-                                    subprocess.Popen(["xdg-open", "https://www.roblox.com/home"], start_new_session=True)
-                            except Exception as ex:
-                                logging.error(f"Notification error: {ex}")
-
-                        threading.Thread(target=trigger_notification, args=(title, content, avatar_path), daemon=True).start()
+                        # Send desktop notification
+                        icon_uri = f"file://{avatar_path}" if avatar_path else None
+                        try:
+                            await notifier.send(
+                                title=title,
+                                message=content,
+                                icon=icon_uri,
+                                on_clicked=on_clicked
+                            )
+                        except Exception as ex:
+                            logging.error(f"Notification error: {ex}")
                         
         except Exception as e:
             logging.error(f"Error during polling: {e}")
             
-        time.sleep(5)
+        await asyncio.sleep(5)
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())
