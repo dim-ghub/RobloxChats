@@ -1079,7 +1079,11 @@ class MainWindow(QMainWindow):
                 avatar_path = download_avatar_sync(sender_id)
                 
             item = QListWidgetItem()
+            msg_id = msg.get("id")
+            if msg_id:
+                item.setData(Qt.ItemDataRole.UserRole, msg_id)
             widget = MessageWidget(content, is_self, avatar_path, reply_data, animate=False)
+            widget.reply_clicked.connect(self.go_to_message)
             
             widget.style().unpolish(widget)
             widget.style().polish(widget)
@@ -1106,6 +1110,16 @@ class MainWindow(QMainWindow):
             
         self.is_loading_history = False
         
+    def go_to_message(self, msg_id):
+        for i in range(self.msg_list.count()):
+            item = self.msg_list.item(i)
+            if item and item.data(Qt.ItemDataRole.UserRole) == msg_id:
+                self.msg_list.scrollToItem(item, QListWidget.ScrollHint.PositionAtCenter)
+                widget = self.msg_list.itemWidget(item)
+                if hasattr(widget, 'trigger_highlight'):
+                    widget.trigger_highlight()
+                break
+
     def on_input_changed(self, text):
         if text and self.current_conv_id:
             if not self.typing_timer.isActive():
@@ -1145,7 +1159,11 @@ class MainWindow(QMainWindow):
                 
             avatar_path = os.path.join(ASSETS_DIR, f"roblox_avatar_{data.get('sender_id')}.png")
             item = QListWidgetItem()
+            msg_id = data.get("id")
+            if msg_id:
+                item.setData(Qt.ItemDataRole.UserRole, msg_id)
             widget = MessageWidget(data["content"], is_self, avatar_path, animate=True)
+            widget.reply_clicked.connect(self.go_to_message)
             item.setSizeHint(widget.sizeHint())
             
             self.msg_list.addItem(item)
