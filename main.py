@@ -26,105 +26,72 @@ SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 ASSETS_DIR = os.path.join(SCRIPT_DIR, "assets")
 os.makedirs(ASSETS_DIR, exist_ok=True)
 
-QSS_THEME = """
-QMainWindow {
-    background-color: #313338;
-}
-QWidget {
-    color: #dbdee1;
-    font-family: 'Segoe UI', Inter, Helvetica, sans-serif;
-    font-size: 14px;
-}
-QLineEdit {
-    background-color: #383a40;
-    color: #dbdee1;
-    border: none;
-    border-radius: 8px;
-    padding: 12px;
-}
-QPushButton {
-    background-color: #5865f2;
-    color: white;
-    border: none;
-    border-radius: 4px;
-    padding: 8px 16px;
-    font-weight: bold;
-}
-QPushButton:hover {
-    background-color: #4752c4;
-}
+QSS_CUSTOM_WIDGETS = """
+/* Remove backgrounds from lists so they inherit the OS theme */
 QListWidget {
-    background-color: #313338;
+    background: transparent;
     border: none;
     outline: none;
 }
-QListWidget#conv_list {
-    background-color: #2b2d31;
-}
-QListWidget#conv_list::item:selected {
-    background-color: #3f4147;
-    border-radius: 4px;
-}
-QListWidget#conv_list::item:hover {
-    background-color: #35373c;
-    border-radius: 4px;
-}
-QSplitter::handle {
-    background-color: #1e1f22;
-    width: 1px;
-}
 
-/* Scrollbars */
-QScrollBar:vertical {
-    background: #2b2d31;
-    width: 12px;
-    margin: 0px;
-}
-QScrollBar::handle:vertical {
-    background: #1a1b1e;
-    min-height: 20px;
-    border-radius: 6px;
-    margin: 2px;
-}
-QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
-    height: 0px;
-}
-QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {
-    background: none;
-}
-
-/* MessageWidget styling via property */
+/* Chat Bubbles */
 MessageWidget[is_self="true"] QWidget#bubble_container {
-    background-color: #4752c4;
-    border-radius: 8px;
+    background-color: #a5d8d3;
+    border-radius: 12px;
 }
 MessageWidget[is_self="false"] QWidget#bubble_container {
-    background-color: #383a40;
-    border-radius: 8px;
+    background-color: #1c2826;
+    border-radius: 12px;
+}
+QLabel#self_msg_text {
+    color: #111111;
+    font-size: 14px;
+    background: transparent;
+}
+QLabel#other_msg_text {
+    color: #e0e0e0;
+    font-size: 14px;
+    background: transparent;
 }
 
 /* Timestamp */
 QLabel#timestamp_label {
-    color: #949ba4;
+    color: #707a78;
     font-size: 12px;
     font-weight: bold;
     padding: 16px 0px 8px 0px;
 }
 
-/* Input box */
+/* Input Area mimicking the AI app */
+QWidget#input_container {
+    background-color: #161f1d;
+    border-radius: 24px;
+}
 QLineEdit#msg_input {
-    background-color: #383a40;
-    color: #dbdee1;
+    background: transparent;
+    color: palette(text);
     border: none;
-    border-radius: 20px; /* More rounded */
     padding: 12px 16px;
+    font-size: 14px;
+}
+QPushButton#send_btn {
+    background-color: #243330;
+    color: #a5d8d3;
+    border-radius: 16px;
+    font-size: 16px;
+    font-weight: bold;
+    margin: 4px;
+    border: none;
+}
+QPushButton#send_btn:hover {
+    background-color: #2d403c;
 }
 """
 
 def get_circular_pixmap(image_path, size=48):
     if not image_path or not os.path.exists(image_path):
         pixmap = QPixmap(size, size)
-        pixmap.fill(QColor("#1e1f22"))
+        pixmap.fill(QColor("#1c2826")) # Matching the dark teal for fallbacks
     else:
         pixmap = QPixmap(image_path).scaled(
             size, size, Qt.AspectRatioMode.KeepAspectRatioByExpanding, Qt.TransformationMode.SmoothTransformation
@@ -139,8 +106,7 @@ def get_circular_pixmap(image_path, size=48):
     path = QPainterPath()
     path.addEllipse(0, 0, size, size)
     painter.setClipPath(path)
-    # Background for transparent images
-    painter.fillPath(path, QColor("#1e1f22"))
+    painter.fillPath(path, QColor("#1c2826"))
     painter.drawPixmap(0, 0, pixmap)
     painter.end()
     return target
@@ -187,11 +153,11 @@ class ConversationWidget(QWidget):
         
         title_lbl = QLabel(title)
         title_lbl.setFont(QFont("Segoe UI", 11, QFont.Weight.Bold))
-        title_lbl.setStyleSheet("color: #dbdee1; background: transparent;")
+        # Removed hardcoded colors so it uses native OS text color
         
         preview_lbl = QLabel()
-        preview_lbl.setStyleSheet("color: #949ba4; background: transparent;")
         preview_lbl.setFont(QFont("Segoe UI", 10))
+        preview_lbl.setStyleSheet("color: palette(placeholderText);") # Uses OS native muted text color
         
         metrics = preview_lbl.fontMetrics()
         preview_text = preview_text.replace("\n", " ")
@@ -216,14 +182,12 @@ class MessageWidget(QWidget):
         layout = QHBoxLayout()
         layout.setContentsMargins(4, 4, 4, 4)
         
-        text_color = "#ffffff" if is_self else "#dbdee1"
-        
         bubble_layout = QVBoxLayout()
-        bubble_layout.setContentsMargins(12, 8, 12, 8)
+        bubble_layout.setContentsMargins(14, 10, 14, 10)
         
         content_lbl = QLabel(content)
         content_lbl.setWordWrap(True)
-        content_lbl.setStyleSheet(f"color: {text_color}; font-size: 14px; background: transparent;")
+        content_lbl.setObjectName("self_msg_text" if is_self else "other_msg_text")
         
         bubble_layout.addWidget(content_lbl)
         
@@ -442,18 +406,34 @@ class MainWindow(QMainWindow):
         self.msg_list = QListWidget()
         self.msg_list.setVerticalScrollMode(QListWidget.ScrollMode.ScrollPerPixel)
         
+        # New Input Area mimicking AI app
+        input_container = QWidget()
+        input_container.setObjectName("input_container")
         input_layout = QHBoxLayout()
-        input_layout.setContentsMargins(24, 16, 24, 24)
+        input_layout.setContentsMargins(0, 0, 0, 0)
+        input_layout.setSpacing(0)
         
         self.msg_input = QLineEdit()
         self.msg_input.setObjectName("msg_input")
         self.msg_input.setPlaceholderText("Send a message")
         self.msg_input.returnPressed.connect(self.send_message)
         
+        self.send_btn = QPushButton("↑")
+        self.send_btn.setObjectName("send_btn")
+        self.send_btn.setFixedSize(32, 32)
+        self.send_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.send_btn.clicked.connect(self.send_message)
+        
         input_layout.addWidget(self.msg_input)
+        input_layout.addWidget(self.send_btn)
+        input_container.setLayout(input_layout)
+        
+        bottom_panel = QVBoxLayout()
+        bottom_panel.setContentsMargins(24, 16, 24, 24)
+        bottom_panel.addWidget(input_container)
         
         right_panel.addWidget(self.msg_list)
-        right_panel.addLayout(input_layout)
+        right_panel.addLayout(bottom_panel)
         
         right_widget = QWidget()
         right_widget.setLayout(right_panel)
@@ -498,7 +478,7 @@ class MainWindow(QMainWindow):
                     QMessageBox.warning(self, "Error", "Invalid cookie. Restart app to try again.")
                     return
             else:
-                return # Can't use app
+                return
                 
         self.refresh_chats()
             
@@ -551,7 +531,7 @@ class MainWindow(QMainWindow):
             loading_item = QListWidgetItem()
             lbl = QLabel("Loading messages...")
             lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            lbl.setStyleSheet("color: #949ba4; padding: 20px;")
+            lbl.setStyleSheet("color: palette(placeholderText); padding: 20px;")
             loading_item.setSizeHint(lbl.sizeHint())
             self.msg_list.addItem(loading_item)
             self.msg_list.setItemWidget(loading_item, lbl)
@@ -581,7 +561,7 @@ class MainWindow(QMainWindow):
                     ts_item.setSizeHint(lbl.sizeHint())
                     self.msg_list.addItem(ts_item)
                     self.msg_list.setItemWidget(ts_item, lbl)
-                    last_sender = None # force avatar reload after timestamp
+                    last_sender = None
                 last_time = dt
             
             is_self = (sender_id == str(api.my_user_id))
@@ -592,7 +572,7 @@ class MainWindow(QMainWindow):
                 
             item = QListWidgetItem()
             widget = MessageWidget(content, is_self, avatar_path)
-            # Ensure custom properties take effect
+            
             widget.style().unpolish(widget)
             widget.style().polish(widget)
             
@@ -611,6 +591,7 @@ class MainWindow(QMainWindow):
         
         self.msg_input.clear()
         self.msg_input.setEnabled(False)
+        self.send_btn.setEnabled(False)
         
         self.sender_thread = MessageSenderThread(self.current_conv_id, text)
         self.sender_thread.finished_signal.connect(self.on_message_sent)
@@ -618,6 +599,7 @@ class MainWindow(QMainWindow):
         
     def on_message_sent(self, success):
         self.msg_input.setEnabled(True)
+        self.send_btn.setEnabled(True)
         self.msg_input.setFocus()
         if success:
             self.loader_thread = ChatLoaderThread(self.current_conv_id, self.conv_map)
@@ -633,13 +615,6 @@ class MainWindow(QMainWindow):
             if not is_self:
                 avatar_path = os.path.join(ASSETS_DIR, f"roblox_avatar_{data.get('sender_id')}.png")
                 
-            created_at_str = data.get("created_at")
-            if created_at_str:
-                dt = dateutil.parser.isoparse(created_at_str)
-                # For simplicity, we just add the timestamp directly if we want,
-                # but an automatic reload of the chat maintains strict order.
-            
-            # Fast append
             item = QListWidgetItem()
             widget = MessageWidget(data["content"], is_self, avatar_path)
             widget.style().unpolish(widget)
@@ -700,7 +675,7 @@ def main():
     
     app = QApplication(sys.argv)
     app.setQuitOnLastWindowClosed(False)
-    app.setStyleSheet(QSS_THEME)
+    app.setStyleSheet(QSS_CUSTOM_WIDGETS)
     
     window = MainWindow(args.minimized)
     
