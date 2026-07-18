@@ -21,9 +21,9 @@ class RobloxAPI:
         return False
 
     def get_current_user(self):
-        res = self.session.get("https://users.roblox.com/v1/users/authenticated")
+        res = self.session.get("https://users.roblox.com/v1/users/authenticated", timeout=10)
         if self.check_csrf(res):
-            res = self.session.get("https://users.roblox.com/v1/users/authenticated")
+            res = self.session.get("https://users.roblox.com/v1/users/authenticated", timeout=10)
         if res.status_code == 200:
             self.my_user_id = res.json().get("id")
             return self.my_user_id
@@ -32,9 +32,9 @@ class RobloxAPI:
 
     def fetch_conversations(self):
         url = "https://apis.roblox.com/platform-chat-api/v1/get-user-conversations?pageNumber=1&pageSize=30"
-        res = self.session.get(url)
+        res = self.session.get(url, timeout=10)
         if self.check_csrf(res):
-            res = self.session.get(url)
+            res = self.session.get(url, timeout=10)
         if res.status_code == 200:
             data = res.json()
             return data if isinstance(data, list) else data.get("conversations", data.get("data", []))
@@ -43,7 +43,7 @@ class RobloxAPI:
 
     def fetch_messages(self, conv_id):
         url = f"https://apis.roblox.com/platform-chat-api/v1/get-conversation-messages?conversation_id={conv_id}&pageSize=50"
-        res = self.session.get(url)
+        res = self.session.get(url, timeout=10)
         if res.status_code == 200:
             data = res.json()
             return data if isinstance(data, list) else data.get("messages", data.get("data", data))
@@ -56,16 +56,16 @@ class RobloxAPI:
             "conversation_id": conv_id,
             "messages": [{"content": text}]
         }
-        res = self.session.post(url, json=payload)
+        res = self.session.post(url, json=payload, timeout=10)
         if self.check_csrf(res):
-            res = self.session.post(url, json=payload)
+            res = self.session.post(url, json=payload, timeout=10)
         if res.status_code == 200:
             return True
         logging.error(f"Failed to send message: {res.status_code} {res.text}")
         return False
 
     def get_user_avatar(self, user_id):
-        res = self.session.get(f"https://thumbnails.roblox.com/v1/users/avatar-headshot?userIds={user_id}&size=48x48&format=Png&isCircular=false")
+        res = self.session.get(f"https://thumbnails.roblox.com/v1/users/avatar-headshot?userIds={user_id}&size=48x48&format=Png&isCircular=false", timeout=10)
         if res.status_code == 200:
             data = res.json()
             if "data" in data and len(data["data"]) > 0:

@@ -164,13 +164,17 @@ class MainWindow(QMainWindow):
         self.notifier_thread.start()
         
         load_dotenv()
-        cookie = os.environ.get("ROBLOSECURITY")
-        if cookie:
-            self.cookie_input.setText(cookie)
-            self.login()
+        self.cookie = os.environ.get("ROBLOSECURITY")
+        if self.cookie:
+            self.cookie_input.setText(self.cookie)
+            QTimer.singleShot(100, self.auto_login)
             
         if not start_minimized:
             self.show()
+            
+    def auto_login(self):
+        if self.cookie:
+            self.login()
             
     def setup_login_tab(self):
         tab = QWidget()
@@ -329,7 +333,11 @@ class MainWindow(QMainWindow):
         menu.addAction(show_action)
         menu.addAction(quit_action)
         self.tray.setContextMenu(menu)
-        self.tray.show()
+        
+        if QSystemTrayIcon.isSystemTrayAvailable():
+            self.tray.show()
+        else:
+            logging.warning("System tray is not available on this environment.")
         
         self.tray.activated.connect(self.tray_icon_activated)
 
