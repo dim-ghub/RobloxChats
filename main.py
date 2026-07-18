@@ -444,7 +444,7 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.setWindowTitle("RobloxChats")
         self.resize(1000, 700)
-        self.app_active = True
+        self.app_active = False
         
         self.setup_ui()
         
