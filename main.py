@@ -318,6 +318,11 @@ class ConversationWidget(QWidget):
         
         self.setLayout(inner_layout)
 
+
+    def showEvent(self, event):
+        super().showEvent(event)
+        self.pop_anim.start()
+
 class QuoteFrame(QFrame):
     clicked = pyqtSignal(str)
     def __init__(self, msg_id, parent=None):
@@ -341,10 +346,6 @@ class MessageWidget(QWidget):
         self.pop_anim.setStartValue(0.0)
         self.pop_anim.setEndValue(1.0)
         self.pop_anim.setEasingCurve(QEasingCurve.Type.OutBack)
-        
-    def showEvent(self, event):
-        super().showEvent(event)
-        self.pop_anim.start()
         
         layout = QHBoxLayout()
         layout.setContentsMargins(4, 4, 4, 4)
