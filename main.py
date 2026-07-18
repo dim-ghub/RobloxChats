@@ -147,7 +147,7 @@ class BubbleWidget(QFrame):
             bg_color = bg_color.lighter(130)
             
         self.setStyleSheet(f"""
-            BubbleWidget {{
+            #bubbleWidget {{
                 background-color: {bg_color.name()};
                 border-top-left-radius: 16px;
                 border-top-right-radius: 16px;
@@ -169,7 +169,7 @@ class InputContainerWidget(QFrame):
         border_color = pal.color(QPalette.ColorRole.Mid)
         
         self.setStyleSheet(f"""
-            QFrame {{
+            #inputContainer {{
                 background-color: {bg_color.name()};
                 border: 1px solid {border_color.name()};
                 border-radius: 24px;
@@ -715,6 +715,7 @@ class MainWindow(QMainWindow):
         
         self.msg_list = QListWidget()
         self.msg_list.setObjectName("msg_list")
+        self.msg_list.setStyleSheet("background: transparent; border: none;")
         self.msg_list.setVerticalScrollMode(QListWidget.ScrollMode.ScrollPerPixel)
         self.msg_list.verticalScrollBar().valueChanged.connect(self.on_scroll_changed)
         
