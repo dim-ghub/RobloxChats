@@ -108,12 +108,20 @@ def download_avatar_sync(user_id):
 
 
 def install_desktop_shortcut():
+    import shutil
+
     app_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "main.py"))
     os.chmod(app_path, os.stat(app_path).st_mode | stat.S_IEXEC)
-    
-    icon_path = os.path.join(ASSETS_DIR, "roblox_logo.png")
-    icon_line = f"Icon={icon_path}" if os.path.exists(icon_path) else "Icon=utilities-terminal"
-    
+
+    icon_line = "Icon=utilities-terminal"
+    src_icon = os.path.join(ASSETS_DIR, "roblox_logo.png")
+    if os.path.exists(src_icon):
+        icon_dir = os.path.expanduser("~/.local/share/icons/hicolor/128x128/apps")
+        os.makedirs(icon_dir, exist_ok=True)
+        dest_icon = os.path.join(icon_dir, "robloxchats.png")
+        shutil.copy2(src_icon, dest_icon)
+        icon_line = f"Icon={dest_icon}"
+
     desktop_content = f"""[Desktop Entry]
 Type=Application
 Name=RobloxChats
