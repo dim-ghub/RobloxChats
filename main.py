@@ -129,7 +129,6 @@ class BubbleWidget(QFrame):
     def __init__(self, is_self, parent=None):
         super().__init__(parent)
         self.setObjectName("bubbleWidget")
-        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         self.is_self = is_self
         self.is_highlighted = False
         self.update_style()
@@ -157,52 +156,45 @@ class BubbleWidget(QFrame):
             }}
         """)
 
-class InputContainerWidget(QFrame):
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.setObjectName("inputContainer")
-        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
-        pal = QApplication.palette()
+class InputContainerWidget(QWidget):
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        
+        pal = self.palette()
         bg_color = pal.color(QPalette.ColorRole.Base)
         if bg_color.lightness() < 128:
             bg_color = bg_color.lighter(130)
         else:
             bg_color = bg_color.darker(105)
-        border_color = pal.color(QPalette.ColorRole.Mid)
-        
-        self.setStyleSheet(f"""
-            #inputContainer {{
-                background-color: {bg_color.name()};
-                border: 1px solid {border_color.name()};
-                border-radius: 24px;
-            }}
-        """)
+            
+        painter.setBrush(bg_color)
+        painter.setPen(pal.color(QPalette.ColorRole.Mid))
+        painter.drawRoundedRect(self.rect(), 24, 24)
 
 class SendButton(QPushButton):
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.setObjectName("sendButton")
-        pal = QApplication.palette()
-        btn_color = pal.color(QPalette.ColorRole.Button).name()
-        hover_color = pal.color(QPalette.ColorRole.Highlight).name()
-        pressed_color = pal.color(QPalette.ColorRole.Highlight).darker(110).name()
-        text_color = pal.color(QPalette.ColorRole.ButtonText).name()
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         
-        self.setStyleSheet(f"""
-            #sendButton {{
-                background-color: {btn_color};
-                border-radius: 16px;
-                color: {text_color};
-                font-weight: bold;
-                font-size: 18px;
-            }}
-            #sendButton:hover {{
-                background-color: {hover_color};
-            }}
-            #sendButton:pressed {{
-                background-color: {pressed_color};
-            }}
-        """)
+        pal = self.palette()
+        if self.isDown():
+            bg_color = pal.color(QPalette.ColorRole.Highlight).darker(110)
+        elif self.underMouse():
+            bg_color = pal.color(QPalette.ColorRole.Highlight)
+        else:
+            bg_color = pal.color(QPalette.ColorRole.Button)
+            
+        painter.setBrush(bg_color)
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.drawRoundedRect(self.rect(), 16, 16)
+        
+        painter.setPen(pal.color(QPalette.ColorRole.ButtonText))
+        font = painter.font()
+        font.setPixelSize(18)
+        font.setBold(True)
+        painter.setFont(font)
+        painter.drawText(self.rect(), Qt.AlignmentFlag.AlignCenter, self.text())
 
 class SettingsDialog(QDialog):
     def __init__(self, parent=None):
