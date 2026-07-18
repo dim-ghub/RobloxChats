@@ -129,6 +129,7 @@ class BubbleWidget(QWidget):
     def __init__(self, is_self, parent=None):
         super().__init__(parent)
         self.is_self = is_self
+        self.is_highlighted = False
         
     def paintEvent(self, event):
         painter = QPainter(self)
@@ -142,6 +143,9 @@ class BubbleWidget(QWidget):
                 bg_color = bg_color.lighter(130)
             else:
                 bg_color = bg_color.darker(110)
+                
+        if self.is_highlighted:
+            bg_color = bg_color.lighter(130)
                 
         painter.setBrush(bg_color)
         painter.setPen(Qt.PenStyle.NoPen)
@@ -353,16 +357,16 @@ class MessageWidget(QWidget):
             
         bubble_layout.addWidget(content_lbl)
         
-        bubble_container = BubbleWidget(is_self)
-        bubble_container.setLayout(bubble_layout)
+        self.bubble_container = BubbleWidget(is_self)
+        self.bubble_container.setLayout(bubble_layout)
         
         bubble_align_layout = QHBoxLayout()
         bubble_align_layout.setContentsMargins(0,0,0,0)
         if is_self:
             bubble_align_layout.addStretch()
-            bubble_align_layout.addWidget(bubble_container)
+            bubble_align_layout.addWidget(self.bubble_container)
         else:
-            bubble_align_layout.addWidget(bubble_container)
+            bubble_align_layout.addWidget(self.bubble_container)
             bubble_align_layout.addStretch()
             
         message_column.addLayout(bubble_align_layout)
@@ -385,6 +389,17 @@ class MessageWidget(QWidget):
             layout.addStretch()
             
         self.setLayout(layout)
+        
+    def trigger_highlight(self):
+        if hasattr(self, 'bubble_container'):
+            self.bubble_container.is_highlighted = True
+            self.bubble_container.update()
+            QTimer.singleShot(1000, self._remove_highlight)
+            
+    def _remove_highlight(self):
+        if hasattr(self, 'bubble_container'):
+            self.bubble_container.is_highlighted = False
+            self.bubble_container.update()
 
 def extract_name(user_id, user_data_dict):
     str_id = str(user_id)
@@ -892,10 +907,8 @@ class MainWindow(QMainWindow):
             if item.data(Qt.ItemDataRole.UserRole) == msg_id:
                 self.msg_list.scrollToItem(item, QListWidget.ScrollHint.PositionAtCenter)
                 widget = self.msg_list.itemWidget(item)
-                if widget:
-                    orig_style = widget.styleSheet()
-                    widget.setStyleSheet("background-color: rgba(255, 255, 255, 0.1); border-radius: 8px;")
-                    QTimer.singleShot(1000, lambda w=widget, s=orig_style: w.setStyleSheet(s))
+                if widget and hasattr(widget, 'trigger_highlight'):
+                    widget.trigger_highlight()
                 break
                 
     def force_open_chat(self, conv_id):
