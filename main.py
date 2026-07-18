@@ -264,23 +264,64 @@ class MessageWidget(QWidget):
         layout = QHBoxLayout()
         layout.setContentsMargins(4, 4, 4, 4)
         
+        message_column = QVBoxLayout()
+        message_column.setSpacing(4)
+        
+        if reply_data:
+            replier_name = "You" if is_self else reply_data.get('sender', 'They')
+            replier_lbl = QLabel(f"{replier_name} replied")
+            replier_lbl.setStyleSheet("color: palette(placeholderText); font-size: 12px; font-weight: bold;")
+            replier_lbl.setAlignment(Qt.AlignmentFlag.AlignRight if is_self else Qt.AlignmentFlag.AlignLeft)
+            message_column.addWidget(replier_lbl)
+            
+            quote_frame = QFrame()
+            quote_frame.setStyleSheet("""
+                QFrame {
+                    background-color: #2b2b2b;
+                    border-radius: 16px;
+                }
+            """)
+            quote_layout = QHBoxLayout()
+            quote_layout.setContentsMargins(14, 10, 14, 10)
+            quote_layout.setSpacing(10)
+            
+            quote_text = reply_data.get('content', '')
+            quote_lbl = QLabel(quote_text)
+            quote_lbl.setStyleSheet("color: #cccccc; font-size: 13px;")
+            quote_lbl.setWordWrap(True)
+            min_w_quote = min(500, len(quote_text) * 7)
+            if min_w_quote > 100:
+                quote_lbl.setMinimumWidth(min_w_quote)
+            
+            bar = QFrame()
+            bar.setFixedWidth(4)
+            bar.setStyleSheet("background-color: #4a4a4a; border-radius: 2px;")
+            
+            if is_self:
+                quote_layout.addWidget(quote_lbl)
+                quote_layout.addWidget(bar)
+            else:
+                quote_layout.addWidget(bar)
+                quote_layout.addWidget(quote_lbl)
+                
+            quote_frame.setLayout(quote_layout)
+            
+            quote_container = QHBoxLayout()
+            quote_container.setContentsMargins(0,0,0,0)
+            if is_self:
+                quote_container.addStretch()
+                quote_container.addWidget(quote_frame)
+            else:
+                quote_container.addWidget(quote_frame)
+                quote_container.addStretch()
+                
+            message_column.addLayout(quote_container)
+            
         bubble_layout = QVBoxLayout()
         bubble_layout.setContentsMargins(14, 10, 14, 10)
         
-        if reply_data:
-            reply_lbl = QLabel(f"Replying to {reply_data.get('sender', 'Unknown')}: {reply_data.get('content', '')}")
-            reply_lbl.setStyleSheet("color: palette(placeholderText); font-size: 11px;")
-            reply_lbl.setWordWrap(True)
-            bubble_layout.addWidget(reply_lbl)
-            
-            line = QFrame()
-            line.setFrameShape(QFrame.Shape.HLine)
-            line.setStyleSheet("background-color: palette(mid); max-height: 1px; margin: 2px 0px;")
-            bubble_layout.addWidget(line)
-        
         content_lbl = QLabel(content)
         content_lbl.setWordWrap(True)
-        # Prevent premature wrapping in layouts
         min_w = min(600, len(content) * 7)
         if min_w > 100:
             content_lbl.setMinimumWidth(min_w)
@@ -290,7 +331,6 @@ class MessageWidget(QWidget):
         )
         content_lbl.setCursor(Qt.CursorShape.IBeamCursor)
         
-        # Force text color using styling to inherit Active palette correctly so it doesn't change when unfocused
         if is_self:
             active_text = QApplication.palette().color(QPalette.ColorGroup.Active, QPalette.ColorRole.HighlightedText).name()
             content_lbl.setStyleSheet(f"color: {active_text}; font-size: 14px;")
@@ -303,20 +343,27 @@ class MessageWidget(QWidget):
         bubble_container = BubbleWidget(is_self)
         bubble_container.setLayout(bubble_layout)
         
+        bubble_align_layout = QHBoxLayout()
+        bubble_align_layout.setContentsMargins(0,0,0,0)
+        if is_self:
+            bubble_align_layout.addStretch()
+            bubble_align_layout.addWidget(bubble_container)
+        else:
+            bubble_align_layout.addWidget(bubble_container)
+            bubble_align_layout.addStretch()
+            
+        message_column.addLayout(bubble_align_layout)
+        
         if is_self:
             layout.addStretch()
-            layout.addWidget(bubble_container)
+            layout.addLayout(message_column)
         else:
             if avatar_path:
                 avatar_lbl = QLabel()
-                avatar_lbl.setPixmap(get_circular_pixmap(avatar_path, 36))
-                avatar_lbl.setFixedSize(36, 36)
+                pixmap = get_circular_pixmap(avatar_path, 32)
+                avatar_lbl.setPixmap(pixmap)
+                avatar_lbl.setFixedSize(32, 32)
                 layout.addWidget(avatar_lbl, alignment=Qt.AlignmentFlag.AlignTop)
-            else:
-                spacer = QWidget()
-                spacer.setFixedSize(36, 36)
-                layout.addWidget(spacer)
-            layout.addWidget(bubble_container)
             layout.addStretch()
             
         self.setLayout(layout)
