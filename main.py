@@ -405,6 +405,19 @@ class MessageWidget(QWidget):
         self.setLayout(self.main_layout)
         
 
+    def update_width(self, w):
+        self._viewport_width = w
+        if hasattr(self, 'bubble_container'):
+            self.bubble_container.setMaximumWidth(int(w * 0.75))
+        self.updateGeometry()
+
+    def sizeHint(self):
+        w = getattr(self, '_viewport_width', 600)
+        h = self.heightForWidth(w) if self.hasHeightForWidth() else super().sizeHint().height()
+        if h < 10:
+            h = super().sizeHint().height()
+        return QSize(w, h)
+
     def showEvent(self, event):
         super().showEvent(event)
         if self.should_animate:
@@ -711,6 +724,7 @@ class MainWindow(QMainWindow):
         
         self.msg_input = QLineEdit()
         self.msg_input.setObjectName("msg_input")
+        self.msg_input.setMaxLength(160)
         self.msg_input.setPlaceholderText("Send a message")
         self.msg_input.setStyleSheet("background: transparent; color: palette(text); border: none; padding: 12px 16px; font-size: 14px;")
         self.msg_input.returnPressed.connect(self.send_message)
@@ -878,13 +892,11 @@ class MainWindow(QMainWindow):
         super().resizeEvent(event)
         if hasattr(self, 'msg_list'):
             w = self.msg_list.viewport().width()
-            max_w = int(w * 0.75)
             for i in range(self.msg_list.count()):
                 item = self.msg_list.item(i)
                 widget = self.msg_list.itemWidget(item)
-                if widget and hasattr(widget, 'bubble_container'):
-                    widget.bubble_container.setMaximumWidth(max_w)
-                    widget.adjustSize()
+                if widget and hasattr(widget, 'update_width'):
+                    widget.update_width(w)
                     item.setSizeHint(widget.sizeHint())
 
     def on_conv_selected(self, item):
@@ -1030,8 +1042,7 @@ class MainWindow(QMainWindow):
             if msg_id:
                 item.setData(Qt.ItemDataRole.UserRole, msg_id)
             widget = MessageWidget(content, is_self, avatar_path, reply_data, animate=True)
-            if hasattr(widget, 'bubble_container'):
-                widget.bubble_container.setMaximumWidth(int(self.msg_list.viewport().width() * 0.75))
+            widget.update_width(self.msg_list.viewport().width())
             widget.reply_clicked.connect(self.go_to_message)
             
             widget.style().unpolish(widget)
