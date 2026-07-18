@@ -181,7 +181,6 @@ class SendButton(QPushButton):
         painter.setBrush(bg_color)
         painter.setPen(Qt.PenStyle.NoPen)
         painter.drawRoundedRect(self.rect(), 16, 16)
-        painter.end()
         
         painter.setPen(pal.color(QPalette.ColorRole.ButtonText))
         font = painter.font()
@@ -189,6 +188,7 @@ class SendButton(QPushButton):
         font.setBold(True)
         painter.setFont(font)
         painter.drawText(self.rect(), Qt.AlignmentFlag.AlignCenter, self.text())
+        painter.end()
 
 class SettingsDialog(QDialog):
     def __init__(self, parent=None):
