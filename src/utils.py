@@ -14,7 +14,7 @@ from PyQt6.QtCore import Qt
 from constants import ASSETS_DIR, CONFIG_PATH, SCRIPT_DIR
 
 
-def get_circular_pixmap(image_path, size=48, presence_type=0, unread=False):
+def get_circular_pixmap(image_path, size=48, presence_type=None, unread=False):
     if not image_path or not os.path.exists(image_path):
         pixmap = QPixmap(size, size)
         pixmap.fill(Qt.GlobalColor.transparent)
@@ -41,14 +41,20 @@ def get_circular_pixmap(image_path, size=48, presence_type=0, unread=False):
     painter.fillPath(path, bg_color)
     
     painter.drawPixmap(0, 0, pixmap)
-    painter.setClipPath(QPainterPath())
+    painter.setClipping(False)
     
-    if presence_type > 0:
-        colors = {1: QColor("#00FF00"), 2: QColor("#0096FF"), 3: QColor("#FFA500")}
-        color = colors.get(presence_type, QColor("#00FF00"))
-        r = size // 5
+    if presence_type is not None:
+        colors = {0: QColor("#808080"), 1: QColor("#00B0FF"), 2: QColor("#00E676"), 3: QColor("#FFA000")}
+        color = colors.get(presence_type, QColor("#808080"))
+        r = max(4, size // 7)
+        
+        painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_Clear)
+        painter.setBrush(Qt.GlobalColor.black)
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.drawEllipse(size - r*2 - 4, size - r*2 - 4, r*2 + 4, r*2 + 4)
+        
+        painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceOver)
         painter.setBrush(color)
-        painter.setPen(QPen(QColor("#111111"), 2))
         painter.drawEllipse(size - r*2 - 2, size - r*2 - 2, r*2, r*2)
         
     if unread:

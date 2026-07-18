@@ -334,6 +334,10 @@ class ConversationWidget(QWidget):
         avatar_lbl.setPixmap(get_circular_pixmap(avatar_path, 40, presence_type, unread))
         avatar_lbl.setFixedSize(40, 40)
         
+        if presence_type is not None:
+            presence_texts = {0: "Offline", 1: "Website", 2: "In Game", 3: "Studio"}
+            avatar_lbl.setToolTip(presence_texts.get(presence_type, "Unknown"))
+        
         text_layout = QVBoxLayout()
         text_layout.setSpacing(2)
         

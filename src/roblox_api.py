@@ -1,6 +1,8 @@
 import os
 import requests
 import logging
+import uuid
+import time
 
 logging.getLogger("urllib3").setLevel(logging.WARNING)
 
@@ -8,6 +10,7 @@ class RobloxAPI:
     def __init__(self):
         self.session = requests.Session()
         self.cookie = None
+        self.session_id = str(uuid.uuid4())
         self.my_user_id = None
         self.my_username = None
         self.my_display_name = None
@@ -103,12 +106,17 @@ class RobloxAPI:
         
     def send_heartbeat(self):
         url = "https://apis.roblox.com/user-heartbeats-api/pulse"
+        payload = {
+            "clientSideTimestampEpochMs": int(time.time() * 1000),
+            "sessionInfo": {"sessionId": self.session_id},
+            "locationInfo": {"websiteLocationInfo": {"url": "https://www.roblox.com/home"}}
+        }
         try:
-            res = self.session.post(url, timeout=5)
+            res = self.session.post(url, json=payload, timeout=5)
             if self.check_csrf(res):
-                self.session.post(url, timeout=5)
-        except:
-            pass
+                self.session.post(url, json=payload, timeout=5)
+        except Exception as e:
+            logging.error(f"Heartbeat error: {e}")
 
     def get_user_avatar(self, user_id):
         res = self.session.get(f"https://thumbnails.roblox.com/v1/users/avatar-headshot?userIds={user_id}&size=48x48&format=Png&isCircular=false", timeout=10)

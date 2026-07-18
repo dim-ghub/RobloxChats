@@ -62,7 +62,8 @@ class PresencePollingThread(QThread):
                     presences = api.get_presence(list(self.user_ids))
                     pres_dict = {str(p["userId"]): p["userPresenceType"] for p in presences}
                     self.presence_signal.emit(pres_dict)
-                api.send_heartbeat()
+                if not getattr(api, "appear_offline", False):
+                    api.send_heartbeat()
             except:
                 pass
             

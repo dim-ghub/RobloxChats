@@ -12,7 +12,7 @@ from PyQt6.QtWidgets import (
     QListWidgetItem, QSizePolicy, QFrame, QListView
 )
 from PyQt6.QtGui import QIcon, QPixmap, QAction
-from PyQt6.QtCore import Qt, QTimer, QSize, QEvent
+from PyQt6.QtCore import Qt, QTimer, QSize, QEvent, QPoint
 
 from roblox_api import api
 from constants import ASSETS_DIR
@@ -32,6 +32,7 @@ class MainWindow(QMainWindow):
         self.resize(1000, 700)
         self.app_active = False
         self.config = load_config()
+        api.appear_offline = self.config.get("appear_offline", False)
         
         self.setup_ui()
         
@@ -85,7 +86,7 @@ class MainWindow(QMainWindow):
         self.profile_btn = QPushButton()
         self.profile_btn.setObjectName("profile_btn")
         self.profile_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.profile_btn.clicked.connect(self.open_settings)
+        self.profile_btn.clicked.connect(self.show_profile_menu)
         self.profile_btn.setFixedHeight(48)
         self.profile_btn.setStyleSheet("""
             QPushButton#profile_btn {
@@ -250,7 +251,8 @@ class MainWindow(QMainWindow):
         if not os.path.exists(avatar_path):
             avatar_path = download_avatar_sync(str(api.my_user_id))
         
-        pixmap = get_circular_pixmap(avatar_path, 32) if avatar_path else QPixmap(32, 32)
+        presence = 0 if getattr(api, "appear_offline", False) else 1
+        pixmap = get_circular_pixmap(avatar_path, 32, presence) if avatar_path else QPixmap(32, 32)
         self.profile_avatar.setPixmap(pixmap)
     
     def open_settings(self):
@@ -269,8 +271,46 @@ class MainWindow(QMainWindow):
                     self.refresh_chats()
                 else:
                     QMessageBox.warning(self, "Error", "Invalid cookie.")
-            self.config["minimize_to_tray"] = dialog.get_minimize_to_tray()
+            
+            # Use getattr to safely get the value in case get_minimize_to_tray doesn't exist
+            if hasattr(dialog, "get_minimize_to_tray"):
+                self.config["minimize_to_tray"] = dialog.get_minimize_to_tray()
+            else:
+                self.config["minimize_to_tray"] = dialog.tray_checkbox.isChecked()
             save_config(self.config)
+
+    def show_profile_menu(self):
+        menu = QMenu(self)
+        
+        settings_action = QAction("Settings", self)
+        settings_action.triggered.connect(self.open_settings)
+        menu.addAction(settings_action)
+        
+        appear_offline_action = QAction("Appear offline", self)
+        appear_offline_action.setCheckable(True)
+        appear_offline_action.setChecked(self.config.get("appear_offline", False))
+        appear_offline_action.toggled.connect(self.toggle_appear_offline)
+        menu.addAction(appear_offline_action)
+        
+        logout_action = QAction("Log out", self)
+        logout_action.triggered.connect(self.logout)
+        menu.addAction(logout_action)
+        
+        pos = self.profile_btn.mapToGlobal(QPoint(0, 0))
+        pos.setY(pos.y() - menu.sizeHint().height())
+        menu.exec(pos)
+
+    def toggle_appear_offline(self, checked):
+        self.config["appear_offline"] = checked
+        save_config(self.config)
+        api.appear_offline = checked
+        self._update_profile_button()
+
+    def logout(self):
+        with open(".env", "w") as f:
+            f.write("ROBLOSECURITY=\n")
+        import sys
+        os.execl(sys.executable, sys.executable, *sys.argv)
             
     def refresh_chats(self):
         self.conv_list.clear()
