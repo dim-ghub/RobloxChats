@@ -31,13 +31,13 @@ QSS_CUSTOM_WIDGETS = """
 /* Remove backgrounds from lists so they inherit the OS theme */
 QListWidget {
     background: transparent;
-    border: none;
-    outline: none;
-}
 QListWidget#msg_list {
     background: transparent;
     border: none;
     outline: none;
+}
+QListWidget#msg_list::item:selected, QListWidget#msg_list::item:hover {
+    background: transparent;
 }
 /* Floating Sidebar Container */
 QWidget#sidebar_container {
@@ -248,6 +248,7 @@ class MessageWidget(QWidget):
         
         content_lbl = QLabel(content)
         content_lbl.setWordWrap(True)
+        content_lbl.setTextInteractionFlags(Qt.TextInteractionFlag.TextBrowserInteraction)
         # Force text color using styling to inherit Active palette correctly so it doesn't change when unfocused
         if is_self:
             active_text = QApplication.palette().color(QPalette.ColorGroup.Active, QPalette.ColorRole.HighlightedText).name()
@@ -278,6 +279,9 @@ class MessageWidget(QWidget):
             layout.addWidget(bubble_container)
             layout.addStretch()
             
+        # Give the bubble container a larger maximum width so it can expand more before wrapping
+        bubble_container.setMaximumWidth(800)
+        
         self.setLayout(layout)
 
 def extract_name(user_id, user_data_dict):
@@ -490,6 +494,7 @@ class ChatListDelegate(QStyledItemDelegate):
         
         if option.state & QStyle.StateFlag.State_Selected:
             bg_color = QApplication.palette().color(QPalette.ColorGroup.Active, QPalette.ColorRole.Highlight)
+            bg_color.setAlpha(128)
             painter.setBrush(bg_color)
             painter.setPen(Qt.PenStyle.NoPen)
             hl_rect = rect.adjusted(4, 4, -4, -4)
