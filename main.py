@@ -23,6 +23,8 @@ def main():
         install_desktop_shortcut()
         
     app = QApplication(sys.argv)
+    app.setApplicationName("robloxchats")
+    app.setDesktopFileName("robloxchats")
     app.setQuitOnLastWindowClosed(False)
     app.setStyleSheet(QSS_CUSTOM_WIDGETS)
     
