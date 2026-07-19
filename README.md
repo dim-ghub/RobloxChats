@@ -10,7 +10,8 @@ A desktop chat client for Roblox with real-time messaging, desktop notifications
 - Profile button in sidebar with settings access
 - Single-instance guard (launching a second time focuses the existing window)
 - Message grouping with avatar display
-- Typing indicators (for recipient)
+- Typing indicators
+- Presence indicators with activity tooltips
 
 ## Setup
 
