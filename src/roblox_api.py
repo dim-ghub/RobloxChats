@@ -26,7 +26,7 @@ class RobloxAPI:
         return False
 
     def get_current_user(self):
-        for attempt in range(3):
+        for attempt in range(10):
             try:
                 res = self.session.get("https://users.roblox.com/v1/users/authenticated", timeout=10)
                 if self.check_csrf(res):
@@ -44,10 +44,10 @@ class RobloxAPI:
                     logging.error(f"Failed to authenticate: {res.status_code} {res.text}")
                     return None
             except requests.exceptions.RequestException:
-                logging.error(f"Failed to connect to Roblox API (attempt {attempt+1}/3). Retrying in 2 seconds...")
+                logging.error(f"Failed to connect to Roblox API (attempt {attempt+1}/10). Retrying in 2 seconds...")
                 time.sleep(2)
         
-        logging.error("Failed to connect to Roblox API after 3 attempts.")
+        logging.error("Failed to connect to Roblox API after 10 attempts.")
         raise ConnectionError("Roblox is down or no internet connection.")
 
     def fetch_conversations(self):
