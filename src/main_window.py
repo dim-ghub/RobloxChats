@@ -19,7 +19,8 @@ from constants import ASSETS_DIR
 from utils import load_config, save_config, get_circular_pixmap, download_avatar_sync, extract_name
 from widgets import (
     BubbleWidget, InputContainerWidget, SendButton,
-    ConversationWidget, QuoteFrame, MessageWidget, ChatListDelegate, TypingMessageWidget
+    ConversationWidget, QuoteFrame, MessageWidget, ChatListDelegate, TypingMessageWidget,
+    SmoothScrollListWidget
 )
 from threads import ChatLoaderThread, MessageSenderThread, RealtimeChatThread
 from dialogs import SettingsDialog
@@ -76,7 +77,7 @@ class MainWindow(QMainWindow):
         sidebar_layout = QVBoxLayout()
         sidebar_layout.setContentsMargins(8, 8, 8, 8)
         
-        self.conv_list = QListWidget()
+        self.conv_list = SmoothScrollListWidget()
         self.conv_list.setObjectName("conv_list")
         self.conv_list.setVerticalScrollMode(QListWidget.ScrollMode.ScrollPerPixel)
         self.conv_list.setItemDelegate(ChatListDelegate(self.conv_list))
@@ -135,7 +136,7 @@ class MainWindow(QMainWindow):
         right_panel = QVBoxLayout()
         right_panel.setContentsMargins(0, 0, 0, 0)
         
-        self.msg_list = QListWidget()
+        self.msg_list = SmoothScrollListWidget()
         self.msg_list.setObjectName("msg_list")
         self.msg_list.setVerticalScrollMode(QListWidget.ScrollMode.ScrollPerPixel)
         self.msg_list.setResizeMode(QListView.ResizeMode.Adjust)

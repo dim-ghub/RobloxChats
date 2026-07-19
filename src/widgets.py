@@ -4,15 +4,112 @@ from PyQt6.QtWidgets import (
     QGraphicsOpacityEffect, QListWidgetItem
 )
 from PyQt6.QtGui import (
-    QPixmap, QPainter, QPainterPath, QColor, QFont, QPalette, QPen, QFontMetrics
+    QPixmap, QPainter, QPainterPath, QColor, QFont, QPalette, QPen, QFontMetrics, QLinearGradient, QBrush
 )
 from PyQt6.QtCore import (
-    Qt, QTimer, QPropertyAnimation, QEasingCurve, pyqtSignal, QSize
+    Qt, QTimer, QPropertyAnimation, QEasingCurve, pyqtSignal, QSize, QAbstractAnimation
 )
 
 import math
 import time
 from utils import get_circular_pixmap
+
+
+class SmoothScrollListWidget(QListWidget):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setVerticalScrollMode(QListWidget.ScrollMode.ScrollPerPixel)
+        
+        self.effect = QGraphicsOpacityEffect(self.viewport())
+        self.effect.setOpacity(1.0)
+        self.viewport().setGraphicsEffect(self.effect)
+        
+        self._target_scroll = self.verticalScrollBar().value()
+        self._scroll_timer = QTimer(self)
+        self._scroll_timer.timeout.connect(self._update_scroll)
+        self._scroll_timer.setInterval(16)
+        
+        self.verticalScrollBar().sliderPressed.connect(self._scroll_timer.stop)
+        self.verticalScrollBar().valueChanged.connect(self._on_value_changed)
+        
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self.update_mask()
+        
+    def _on_value_changed(self, value):
+        self.update_mask()
+        if not getattr(self, '_is_animating', False):
+            self._target_scroll = value
+            self._scroll_timer.stop()
+
+    def update_mask(self):
+        viewport = self.viewport()
+        if viewport.height() == 0:
+            return
+            
+        fade_height = int(viewport.height() * 0.2)
+        if fade_height < 20: fade_height = 20
+        if fade_height > 150: fade_height = 150
+        
+        bar = self.verticalScrollBar()
+        top_dist = bar.value() - bar.minimum()
+        top_alpha = min(1.0, top_dist / 50.0)
+        
+        if bar.maximum() == 0:
+            bottom_alpha = 0.0
+            top_alpha = 0.0
+        else:
+            bottom_dist = bar.maximum() - bar.value()
+            bottom_alpha = min(1.0, bottom_dist / 50.0)
+            
+        gradient = QLinearGradient(0, 0, 0, viewport.height())
+        fade_ratio = fade_height / viewport.height()
+        fade_ratio = min(0.49, max(0.01, fade_ratio))
+        
+        gradient.setColorAt(0.0, QColor(0, 0, 0, int(255 * (1.0 - top_alpha))))
+        gradient.setColorAt(fade_ratio, QColor(0, 0, 0, 255))
+        gradient.setColorAt(1.0 - fade_ratio, QColor(0, 0, 0, 255))
+        gradient.setColorAt(1.0, QColor(0, 0, 0, int(255 * (1.0 - bottom_alpha))))
+        
+        self.effect.setOpacityMask(QBrush(gradient))
+
+    def wheelEvent(self, event):
+        delta = event.angleDelta().y()
+        if delta == 0:
+            super().wheelEvent(event)
+            return
+            
+        bar = self.verticalScrollBar()
+        step = bar.singleStep() * 4
+        
+        if not self._scroll_timer.isActive():
+            self._target_scroll = bar.value()
+            
+        if delta > 0:
+            self._target_scroll = max(bar.minimum(), self._target_scroll - step)
+        else:
+            self._target_scroll = min(bar.maximum(), self._target_scroll + step)
+            
+        self._scroll_timer.start()
+
+    def _update_scroll(self):
+        bar = self.verticalScrollBar()
+        current = bar.value()
+        
+        diff = self._target_scroll - current
+        if abs(diff) < 1:
+            self._is_animating = True
+            bar.setValue(int(self._target_scroll))
+            self._is_animating = False
+            self._scroll_timer.stop()
+        else:
+            step = diff * 0.2
+            if abs(step) < 1:
+                step = math.copysign(1, step)
+            self._is_animating = True
+            bar.setValue(int(current + step))
+            self._is_animating = False
+
 
 
 class BubbleWidget(QFrame):
